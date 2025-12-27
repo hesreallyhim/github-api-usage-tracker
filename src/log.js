@@ -1,3 +1,5 @@
+const core = require('@actions/core');
+
 const VALID_BUCKETS = [
   'core',
   'search',
@@ -16,7 +18,7 @@ function isQuiet(raw) {
 }
 
 function log(quiet, message) {
-  if (!quiet) console.log(message);
+  if (!quiet) core.info(message);
 }
 
 function parseBuckets(raw) {
