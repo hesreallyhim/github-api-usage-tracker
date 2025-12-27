@@ -1,4 +1,5 @@
 const https = require('https');
+const core = require('@actions/core');
 
 function fetchRateLimit(token, quiet = true) {
   return new Promise((resolve, reject) => {
@@ -17,7 +18,7 @@ function fetchRateLimit(token, quiet = true) {
       res.on('data', c => data += c);
       res.on('end', () => {
         if (!quiet) {
-          console.log(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
+          core.info(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
         }
         if (res.statusCode < 200 || res.statusCode >= 300) {
           return reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
