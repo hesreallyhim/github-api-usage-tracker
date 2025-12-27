@@ -57,24 +57,25 @@ async function run() {
 
     // Build summary table
     const activeBuckets = Object.keys(data);
-    const headerRow = ['', ...activeBuckets].join(' | ');
-    const separatorRow = ['---', ...activeBuckets.map(() => '---')].join(' | ');
-    const usedRow = ['**Used**', ...activeBuckets.map(b => data[b].used)].join(' | ');
-    const remainingRow = ['**Remaining**', ...activeBuckets.map(b => data[b].remaining)].join(' | ');
+    const headerRow = [
+      { data: '', header: true },
+      ...activeBuckets.map(b => ({ data: b, header: true }))
+    ];
+    const usedRow = [
+      { data: 'Used', header: true },
+      ...activeBuckets.map(b => ({ data: String(data[b].used) }))
+    ];
+    const remainingRow = [
+      { data: 'Remaining', header: true },
+      ...activeBuckets.map(b => ({ data: String(data[b].remaining) }))
+    ];
 
-    const summary = [
-      '# GitHub API Usage',
-      '',
-      `**Total:** ${totalUsed} requests`,
-      `**Duration:** ${formatDuration(duration)}`,
-      '',
-      `| ${headerRow} |`,
-      `| ${separatorRow} |`,
-      `| ${usedRow} |`,
-      `| ${remainingRow} |`
-    ].join('\n');
-
-    await core.summary.addRaw(summary).write();
+    await core.summary
+      .addHeading('GitHub API Usage', 1)
+      .addRaw(`**Total:** ${totalUsed} requests\n\n`)
+      .addRaw(`**Duration:** ${formatDuration(duration)}\n\n`)
+      .addTable([headerRow, usedRow, remainingRow])
+      .write();
 
     // Set output
     const output = { total: totalUsed, duration_ms: duration, buckets: data };
