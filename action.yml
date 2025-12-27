@@ -11,13 +11,17 @@ inputs:
     required: false
     default: ${{ github.token }}
   quiet:
-    description: Suppress output when true
+    description: Suppress intermediate logs when true
     required: false
-    default: "false"
+    default: "true"
+  buckets:
+    description: Comma-separated rate-limit buckets to track (core,search,graphql,code_search,integration_manifest,dependency_snapshots,dependency_sbom,code_scanning_upload,actions_runner_registration,source_import)
+    required: false
+    default: core,search,graphql
   output_path:
-    description: Path to write JSON report; set empty to skip
+    description: Path to write JSON report; leave empty to skip
     required: false
-    default: usage.json
+    default: ""
 
 outputs:
   usage:

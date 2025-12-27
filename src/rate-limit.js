@@ -1,6 +1,6 @@
 const https = require('https');
 
-function fetchRateLimit(token) {
+function fetchRateLimit(token, quiet = true) {
   return new Promise((resolve, reject) => {
     if (!token) return reject(new Error('No GitHub token provided'));
 
@@ -16,8 +16,11 @@ function fetchRateLimit(token) {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
+        if (!quiet) {
+          console.log(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
+        }
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`GitHub API returned ${res.statusCode}`));
+          return reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
         }
         try {
           resolve(JSON.parse(data));
