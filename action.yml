@@ -10,10 +10,10 @@ inputs:
     description: Token to query rate_limit (defaults to github.token)
     required: false
     default: ${{ github.token }}
-  log_level:
-    description: quiet | notice | info | debug
+  quiet:
+    description: Suppress output when true
     required: false
-    default: info
+    default: "false"
   output_path:
     description: Path to write JSON report; set empty to skip
     required: false

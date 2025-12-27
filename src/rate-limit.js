@@ -16,6 +16,9 @@ function fetchRateLimit(token) {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`GitHub API returned ${res.statusCode}`));
+        }
         try {
           resolve(JSON.parse(data));
         } catch (e) {

@@ -2,7 +2,7 @@ const core = require('@actions/core');
 const fs = require('fs');
 const path = require('path');
 const { fetchRateLimit } = require('./rate-limit');
-const { parseLogLevel, log } = require('./log');
+const { isQuiet, log } = require('./log');
 
 function numState(key) {
   const n = Number(core.getState(key));
@@ -19,7 +19,7 @@ function maybeWrite(pathname, data) {
 async function run() {
   try {
     const token = core.getInput('token');
-    const logLevel = parseLogLevel(core.getInput('log_level') || core.getState('log_level'));
+    const quiet = isQuiet(core.getInput('quiet') || core.getState('quiet'));
 
     const start = {
       core: numState('start_core_remaining'),
@@ -34,7 +34,7 @@ async function run() {
     for (const area of ['core', 'graphql', 'search']) {
       if (start[area] !== undefined && res[area]) {
         usage[area] = Math.max(0, start[area] - res[area].remaining);
-        log('notice', logLevel, `${area} used: ${usage[area]}`);
+        log(quiet, `${area} used: ${usage[area]}`);
       }
     }
 
