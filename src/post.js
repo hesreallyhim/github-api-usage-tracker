@@ -1,14 +1,53 @@
+/**
+ * Retrieves a numeric state value from the GitHub Actions state.
+ *
+ * @param {string} key - The state key to retrieve.
+ * @returns {number|undefined} - The numeric value if valid and finite, otherwise undefined.
+ */
+
+/**
+ * Writes a summary table of API resource usage to the GitHub Actions summary.
+ *
+ * @param {Object.<string, {used: number, remaining: number}>} resources - Object mapping bucket names to usage info.
+ */
+
+/**
+ * Main post-action function that calculates and reports GitHub API usage.
+ * Fetches final rate limits, compares with starting values, and outputs usage data.
+ *
+ * @async
+ * @returns {Promise<void>}
+ */
 const core = require('@actions/core');
 const fs = require('fs');
 const path = require('path');
 const { fetchRateLimit } = require('./rate-limit');
-const { parseLogLevel, log } = require('./log');
+const { log, parseBuckets } = require('./log');
 
-function numState(key) {
-  const n = Number(core.getState(key));
-  return Number.isFinite(n) ? n : undefined;
+/**
+ * Converts milliseconds to a human-readable duration string.
+ *
+ * @param {number} ms - milliseconds.
+ *
+ * @returns {string} - formatted milliseconds string.
+ */
+function formatMs(ms) {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${secs}s`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours}h ${mins}m ${secs}s`;
 }
 
+/**
+ * Writes JSON-stringified data to a file if a valid pathname is provided.
+ *
+ * @param {string} pathname - file path to write to.
+ * @param {object} data - data to write.
+ */
 function maybeWrite(pathname, data) {
   if (!pathname) return;
   const dir = path.dirname(pathname);
@@ -16,34 +55,109 @@ function maybeWrite(pathname, data) {
   fs.writeFileSync(pathname, JSON.stringify(data, null, 2));
 }
 
+function makeSummaryTable(resources) {
+  const summaryTable = [
+    { data: "Bucket", header: true },
+    { data: "Used", header: true },
+    { data: "Remaining", header: true },
+  ];
+  for (const [bucket, info] of Object.entries(resources)) {
+    summaryTable.push(
+      { data: bucket },
+      { data: String(info.used) },
+      { data: String(info.remaining) }
+    );
+  }
+
+  return summaryTable;
+}
+
 async function run() {
+  if (core.getState('skip_post') === 'true') {
+    log("[github-api-usage-tracker] Skipping post stepp due to missing token");
+    return;
+  }
   try {
-    const token = core.getInput('token');
-    const logLevel = parseLogLevel(core.getInput('log_level') || core.getState('log_level'));
+    const buckets = parseBuckets(core.getInput('buckets'));
 
-    const start = {
-      core: numState('start_core_remaining'),
-      graphql: numState('start_graphql_remaining'),
-      search: numState('start_search_remaining')
-    };
+    if (buckets.length === 0) {
+      log("[github-api-usage-tracker] No valid buckets specified for tracking");
+      return;
+    }
 
-    const limits = await fetchRateLimit(token);
-    const res = limits.resources || {};
-    const usage = {};
+    const startingState = core.getState('starting_rate_limits');
+    if (!startingState) {
+      core.error(
+        '[github-api-usage-tracker] No starting rate limit data found; skipping post step'
+      );
+      return;
+    }
+    let startingResources;
+    try {
+      startingResources = JSON.parse(startingState);
+    } catch (err) {
+      core.error(
+        '[github-api-usage-tracker] Failed to parse starting rate limit data; skipping post step'
+      );
+      return;
+    }
+    const startTime = Number(core.getState('start_time'));
+    const hasStartTime = Number.isFinite(startTime);
+    if (!hasStartTime) {
+      core.error(
+        '[github-api-usage-tracker] Invalid or missing start time; duration will be reported as unknown'
+      );
+    }
+    const endTime = Date.now();
+    const duration = hasStartTime ? endTime - startTime : null;
 
-    for (const area of ['core', 'graphql', 'search']) {
-      if (start[area] !== undefined && res[area]) {
-        usage[area] = Math.max(0, start[area] - res[area].remaining);
-        log('notice', logLevel, `${area} used: ${usage[area]}`);
+    log('[github-api-usage-tracker] Fetching final rate limits...');
+
+    const endingLimits = await fetchRateLimit();
+    const endingResources = endingLimits.resources || {};
+
+    const data = {};
+    let totalUsed = 0;
+
+    for (const bucket of buckets) {
+      const startingUsed = startingResources[bucket]?.used;
+      const endingUsed = endingResources[bucket]?.used;
+      if (startingUsed !== undefined && endingUsed !== undefined) {
+        const used = endingUsed - startingUsed;
+        const remaining = endingResources[bucket].remaining;
+        data[bucket] = { used, remaining };
+        totalUsed += used;
       }
     }
 
-    core.setOutput('usage', JSON.stringify(usage));
+    // Set output
+    const output = {
+      total: totalUsed,
+      duration_ms: duration,
+      buckets_data: data,
+    };
+    core.setOutput('usage', JSON.stringify(output));
 
+    // Write JSON file if path specified
     const outPath = (core.getInput('output_path') || '').trim();
-    maybeWrite(outPath, usage);
+    maybeWrite(outPath, output);
+
+    core.summary
+      .addHeading('GitHub API Usage Tracker Summary')
+      .addTable(makeSummaryTable(data))
+      .addRaw(
+        `<p><strong>Action Duration:</strong> ${
+          hasStartTime ? formatMs(duration) : 'Unknown (data missing)'
+        }</p>`,
+        true
+      )
+      .addRaw(
+        `<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`,
+        true
+      )
+      .write();
   } catch (err) {
-    core.warning(`Post step failed: ${err.message}`);
+    core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);
   }
 }
 

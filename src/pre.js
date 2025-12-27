@@ -1,27 +1,30 @@
-const core = require("@actions/core");
-const { fetchRateLimit } = require("./rate-limit");
-const { parseLogLevel, log } = require("./log");
+const core = require('@actions/core');
+const { fetchRateLimit } = require('./rate-limit');
+const { log } = require('./log');
 
 async function run() {
   try {
-    const token = core.getInput("token");
-    const logLevel = parseLogLevel(core.getInput("log_level"));
+    const token = core.getInput('token');
 
-    core.saveState("log_level", logLevel);
-
-    const limits = await fetchRateLimit(token);
-    const res = limits.resources || {};
-
-    if (!res.core) throw new Error("Missing core rate-limit data");
-
-    for (const area of ["core", "graphql", "search"]) {
-      if (!res[area]) continue;
-      core.saveState(`start_${area}_remaining`, String(res[area].remaining));
-      if (res[area].reset)
-        core.saveState(`start_${area}_reset`, String(res[area].reset));
+    if (!token) {
+      core.error('GitHub token is required for API Usage Tracker');
+      core.saveState('skip_post', 'true');
+      return;
     }
 
-    log("info", logLevel, "Captured starting GitHub API rate limits");
+    const startTime = Date.now();
+    core.saveState('start_time', String(startTime));
+
+    log('[github-api-usage-tracker] Fetching initial rate limits...');
+
+    const limits = await fetchRateLimit();
+    const resources = limits.resources || {};
+
+    log('[github-api-usage-tracker] Initial Snapshot:');
+    log('[github-api-usage-tracker] -----------------');
+    log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
+
+    core.saveState('starting_rate_limits', JSON.stringify(resources));
   } catch (err) {
     core.warning(`Pre step failed: ${err.message}`);
   }

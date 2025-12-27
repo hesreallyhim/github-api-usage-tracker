@@ -10,18 +10,22 @@ inputs:
     description: Token to query rate_limit (defaults to github.token)
     required: false
     default: ${{ github.token }}
-  log_level:
-    description: quiet | notice | info | debug
+  quiet:
+    description: Suppress intermediate logs when true
     required: false
-    default: info
+    default: "false"
+  buckets:
+    description: Comma-separated rate-limit buckets to track (core,search,graphql,code_search,integration_manifest,dependency_snapshots,dependency_sbom,code_scanning_upload,actions_runner_registration,source_import)
+    required: false
+    default: core,search,graphql
   output_path:
     description: Path to write JSON report; set empty to skip
     required: false
-    default: usage.json
+    default: github_api_usage.json
 
 outputs:
   usage:
-    description: JSON string of used requests per bucket (core/graphql/search)
+    description: JSON string with total, duration_ms, and buckets_data (per-bucket used/remaining)
 
 runs:
   using: node20
