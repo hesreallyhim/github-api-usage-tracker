@@ -42,9 +42,8 @@ Example output:
 
 ## Notes
 
-- Usage counts are **approximate**.
-- If the rate-limit window resets during the job, deltas may be inaccurate.
-- The action runs once per job using pre and post hooks.
+- Usage counts may be affected by other workflows in the repo, and therefore should not be considered 100% precise as measurements of the current job.
+- The action uses pre and post job hooks to snapshot the rate limit, so you only need to use it in one step - the rest will be handled automatically.
 
 ## License
 MIT © 2025 Really Him
