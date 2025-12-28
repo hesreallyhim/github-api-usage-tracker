@@ -14,20 +14,16 @@ function fetchRateLimit() {
         headers: {
           'User-Agent': 'github-api-usage-tracker',
           Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-        },
+          Accept: 'application/vnd.github+json'
+        }
       },
       (res) => {
         let data = '';
         res.on('data', (c) => (data += c));
         res.on('end', () => {
-          log(
-            `[github-api-usage-tracker] GitHub API response: ${res.statusCode}`
-          );
+          log(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(
-              new Error(`GitHub API returned ${res.statusCode}: ${data}`)
-            );
+            return reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
           }
           try {
             resolve(JSON.parse(data));

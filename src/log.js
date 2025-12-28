@@ -1,4 +1,4 @@
-const core = require("@actions/core");
+const core = require('@actions/core');
 
 /**
  * List of valid GitHub API rate limit buckets.
@@ -13,13 +13,12 @@ const VALID_BUCKETS = [
   'dependency_sbom',
   'code_scanning_upload',
   'actions_runner_registration',
-  'source_import',
+  'source_import'
 ];
-
 
 /**
  * Determines if the user input `quiet` has been set to true.
- * 
+ *
  * @returns {boolean} - Whether the user input `quiet` has been set.
  */
 function isQuiet() {

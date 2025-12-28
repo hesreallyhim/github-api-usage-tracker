@@ -13,7 +13,7 @@ inputs:
   quiet:
     description: Suppress intermediate logs when true
     required: false
-    default: "false"
+    default: 'false'
   buckets:
     description: Comma-separated rate-limit buckets to track (core,search,graphql,code_search,integration_manifest,dependency_snapshots,dependency_sbom,code_scanning_upload,actions_runner_registration,source_import)
     required: false

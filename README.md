@@ -18,20 +18,20 @@ jobs:
 
 ## Inputs
 
-| Name          | Description                                             | Default      |
-| ------------- | ------------------------------------------------------- | ------------ |
-| token         | GitHub token used to query rate limits                  | github.token |
-| log_level     | quiet, notice, info, debug                              | info         |
-| output_path   | Write usage report JSON to this path (empty to disable) | usage.json   |
+| Name        | Description                                             | Default      |
+| ----------- | ------------------------------------------------------- | ------------ |
+| token       | GitHub token used to query rate limits                  | github.token |
+| log_level   | quiet, notice, info, debug                              | info         |
+| output_path | Write usage report JSON to this path (empty to disable) | usage.json   |
 
 ## Outputs
 
-| Name   | Description                        |
-| ------ | ---------------------------------- |
-| usage  | JSON string mapping API area ("bucket") -> requests used |
-
+| Name  | Description                                              |
+| ----- | -------------------------------------------------------- |
+| usage | JSON string mapping API area ("bucket") -> requests used |
 
 Example output:
+
 ```json
 {
   "core": 45,
@@ -46,4 +46,5 @@ Example output:
 - The action uses pre and post job hooks to snapshot the rate limit, so you only need to use it in one step - the rest will be handled automatically.
 
 ## License
+
 MIT © 2025 Really Him

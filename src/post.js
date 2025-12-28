@@ -57,9 +57,9 @@ function maybeWrite(pathname, data) {
 
 function makeSummaryTable(resources) {
   const summaryTable = [
-    { data: "Bucket", header: true },
-    { data: "Used", header: true },
-    { data: "Remaining", header: true },
+    { data: 'Bucket', header: true },
+    { data: 'Used', header: true },
+    { data: 'Remaining', header: true }
   ];
   for (const [bucket, info] of Object.entries(resources)) {
     summaryTable.push(
@@ -74,14 +74,14 @@ function makeSummaryTable(resources) {
 
 async function run() {
   if (core.getState('skip_post') === 'true') {
-    log("[github-api-usage-tracker] Skipping post stepp due to missing token");
+    log('[github-api-usage-tracker] Skipping post stepp due to missing token');
     return;
   }
   try {
     const buckets = parseBuckets(core.getInput('buckets'));
 
     if (buckets.length === 0) {
-      log("[github-api-usage-tracker] No valid buckets specified for tracking");
+      log('[github-api-usage-tracker] No valid buckets specified for tracking');
       return;
     }
 
@@ -95,7 +95,7 @@ async function run() {
     let startingResources;
     try {
       startingResources = JSON.parse(startingState);
-    } catch (err) {
+    } catch {
       core.error(
         '[github-api-usage-tracker] Failed to parse starting rate limit data; skipping post step'
       );
@@ -134,7 +134,7 @@ async function run() {
     const output = {
       total: totalUsed,
       duration_ms: duration,
-      buckets_data: data,
+      buckets_data: data
     };
     core.setOutput('usage', JSON.stringify(output));
 
@@ -151,10 +151,7 @@ async function run() {
         }</p>`,
         true
       )
-      .addRaw(
-        `<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`,
-        true
-      )
+      .addRaw(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`, true)
       .write();
   } catch (err) {
     core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);
