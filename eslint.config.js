@@ -16,5 +16,11 @@ module.exports = [
       quotes: ['error', 'single', { avoidEscape: true }],
       'comma-dangle': ['error', 'never']
     }
+  },
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module'
+    }
   }
 ];

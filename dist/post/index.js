@@ -27821,14 +27821,56 @@ function parseBuckets(raw) {
   }
   if (invalidBuckets.length > 0) {
     core.warning(
-      `Invalid bucket(s) selected: ${invalidBuckets.join(', ')},
-      valid options are: ${VALID_BUCKETS.join(', ')}`
+      `Invalid bucket(s) selected: ${invalidBuckets.join(', ')}, valid options are: ${VALID_BUCKETS.join(', ')}`
     );
   }
   return buckets;
 }
 
 module.exports = { isQuiet, log, parseBuckets, VALID_BUCKETS };
+
+
+/***/ }),
+
+/***/ 5828:
+/***/ ((module) => {
+
+/**
+ * Converts milliseconds to a human-readable duration string.
+ *
+ * @param {number} ms - milliseconds.
+ *
+ * @returns {string} - formatted milliseconds string.
+ */
+function formatMs(ms) {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${secs}s`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours}h ${mins}m ${secs}s`;
+}
+
+function makeSummaryTable(resources) {
+  const summaryTable = [
+    { data: 'Bucket', header: true },
+    { data: 'Used', header: true },
+    { data: 'Remaining', header: true }
+  ];
+  for (const [bucket, info] of Object.entries(resources)) {
+    summaryTable.push(
+      { data: bucket },
+      { data: String(info.used) },
+      { data: String(info.remaining) }
+    );
+  }
+
+  return summaryTable;
+}
+
+module.exports = { formatMs, makeSummaryTable };
 
 
 /***/ }),
@@ -27946,24 +27988,7 @@ const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 const { fetchRateLimit } = __nccwpck_require__(5042);
 const { log, parseBuckets } = __nccwpck_require__(9630);
-
-/**
- * Converts milliseconds to a human-readable duration string.
- *
- * @param {number} ms - milliseconds.
- *
- * @returns {string} - formatted milliseconds string.
- */
-function formatMs(ms) {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${secs}s`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m ${secs}s`;
-}
+const { formatMs, makeSummaryTable } = __nccwpck_require__(5828);
 
 /**
  * Writes JSON-stringified data to a file if a valid pathname is provided.
@@ -27978,26 +28003,9 @@ function maybeWrite(pathname, data) {
   fs.writeFileSync(pathname, JSON.stringify(data, null, 2));
 }
 
-function makeSummaryTable(resources) {
-  const summaryTable = [
-    { data: 'Bucket', header: true },
-    { data: 'Used', header: true },
-    { data: 'Remaining', header: true }
-  ];
-  for (const [bucket, info] of Object.entries(resources)) {
-    summaryTable.push(
-      { data: bucket },
-      { data: String(info.used) },
-      { data: String(info.remaining) }
-    );
-  }
-
-  return summaryTable;
-}
-
 async function run() {
   if (core.getState('skip_post') === 'true') {
-    log('[github-api-usage-tracker] Skipping post stepp due to missing token');
+    log('[github-api-usage-tracker] Skipping post step due to missing token');
     return;
   }
   try {
@@ -28045,12 +28053,28 @@ async function run() {
     for (const bucket of buckets) {
       const startingUsed = startingResources[bucket]?.used;
       const endingUsed = endingResources[bucket]?.used;
-      if (startingUsed !== undefined && endingUsed !== undefined) {
-        const used = endingUsed - startingUsed;
-        const remaining = endingResources[bucket].remaining;
-        data[bucket] = { used, remaining };
-        totalUsed += used;
+      if (startingUsed === undefined) {
+        core.warning(
+          `[github-api-usage-tracker] Starting rate limit bucket "${bucket}" not found; skipping`
+        );
+        continue;
       }
+      if (endingUsed === undefined) {
+        core.warning(
+          `[github-api-usage-tracker] Ending rate limit bucket "${bucket}" not found; skipping`
+        );
+        continue;
+      }
+      let used = endingUsed - startingUsed;
+      if (used < 0) {
+        core.warning(
+          `[github-api-usage-tracker] Negative usage for bucket "${bucket}" detected; clamping to 0`
+        );
+        used = 0;
+      }
+      const remaining = endingResources[bucket].remaining;
+      data[bucket] = { used, remaining };
+      totalUsed += used;
     }
 
     // Set output

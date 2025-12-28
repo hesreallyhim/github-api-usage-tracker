@@ -59,8 +59,7 @@ function parseBuckets(raw) {
   }
   if (invalidBuckets.length > 0) {
     core.warning(
-      `Invalid bucket(s) selected: ${invalidBuckets.join(', ')},
-      valid options are: ${VALID_BUCKETS.join(', ')}`
+      `Invalid bucket(s) selected: ${invalidBuckets.join(', ')}, valid options are: ${VALID_BUCKETS.join(', ')}`
     );
   }
   return buckets;

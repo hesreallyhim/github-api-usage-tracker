@@ -6,7 +6,7 @@
   "repository": "https://github.com/hesreallyhim/github-api-usage-tracker",
   "type": "commonjs",
   "scripts": {
-    "bundle": "rm -rf dist && ncc build src/pre.js -o dist/pre && ncc build src/post.js -o dist/post && ncc build src/noop.js -o dist/noop",
+    "bundle": "rimraf dist && ncc build src/pre.js -o dist/pre && ncc build src/post.js -o dist/post && ncc build src/noop.js -o dist/noop",
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
@@ -25,6 +25,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
     "vitest": "^4.0.16",
     "@vitest/coverage-v8": "^4.0.16"
   },
