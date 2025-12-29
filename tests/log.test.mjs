@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vites
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { isQuiet, log, parseBuckets, VALID_BUCKETS } = require('../src/log.js');
-
-const originalQuiet = process.env.INPUT_QUIET;
+const { log, parseBuckets, VALID_BUCKETS } = require('../src/log.js');
 let stdoutSpy;
 
 describe('log helpers', () => {
@@ -14,43 +12,16 @@ describe('log helpers', () => {
 
   beforeEach(() => {
     stdoutSpy.mockClear();
-    delete process.env.INPUT_QUIET;
   });
 
   afterAll(() => {
     stdoutSpy.mockRestore();
-    if (originalQuiet === undefined) {
-      delete process.env.INPUT_QUIET;
-    } else {
-      process.env.INPUT_QUIET = originalQuiet;
-    }
   });
 
-  it('treats quiet input as true when set to "true"', () => {
-    process.env.INPUT_QUIET = 'true';
-    expect(isQuiet()).toBe(true);
-    process.env.INPUT_QUIET = 'TRUE';
-    expect(isQuiet()).toBe(true);
-  });
-
-  it('treats quiet input as false when unset or not "true"', () => {
-    delete process.env.INPUT_QUIET;
-    expect(isQuiet()).toBe(false);
-    process.env.INPUT_QUIET = 'false';
-    expect(isQuiet()).toBe(false);
-  });
-
-  it('logs when quiet is false', () => {
-    process.env.INPUT_QUIET = 'false';
+  it('logs using core.debug', () => {
     log('hello');
     const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join('');
-    expect(output).toContain('hello');
-  });
-
-  it('does not log when quiet is true', () => {
-    process.env.INPUT_QUIET = 'true';
-    log('quiet');
-    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(output).toContain('::debug::hello');
   });
 
   it('parses valid buckets and warns on invalid ones', () => {

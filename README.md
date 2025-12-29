@@ -18,11 +18,11 @@ jobs:
 
 ## Inputs
 
-| Name        | Description                                             | Default      |
-| ----------- | ------------------------------------------------------- | ------------ |
-| token       | GitHub token used to query rate limits                  | github.token |
-| log_level   | quiet, notice, info, debug                              | info         |
-| output_path | Write usage report JSON to this path (empty to disable) | usage.json   |
+| Name        | Description                                                                                                                                                                                                    | Default               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| token       | GitHub token used to query rate limits                                                                                                                                                                         | github.token          |
+| buckets     | Comma-separated list of rate-limit buckets to track (core,search,graphql,code_search,integration_manifest,dependency_snapshots,dependency_sbom,code_scanning_upload,actions_runner_registration,source_import) | core,search,graphql   |
+| output_path | Write usage report JSON to this path (empty to disable)                                                                                                                                                        | github_api_usage.json |
 
 ## Outputs
 
@@ -44,6 +44,7 @@ Example output:
 
 - Usage counts may be affected by other workflows in the repo, and therefore should not be considered 100% precise as measurements of the current job.
 - The action uses pre and post job hooks to snapshot the rate limit, so you only need to use it in one step - the rest will be handled automatically.
+- Logs are emitted via `core.debug()`. Enable step debug logging to view them.
 
 ## License
 

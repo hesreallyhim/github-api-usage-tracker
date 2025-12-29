@@ -27779,22 +27779,12 @@ const VALID_BUCKETS = [
 ];
 
 /**
- * Determines if the user input `quiet` has been set to true.
- *
- * @returns {boolean} - Whether the user input `quiet` has been set.
- */
-function isQuiet() {
-  const isQuietInput = core.getInput('quiet');
-  return String(isQuietInput || '').toLowerCase() === 'true';
-}
-
-/**
- * Conditionally logs a message if the input variable `quiet` is false.
+ * Logs a message using GitHub Actions debug logging.
  *
  * @param {string} message - message to log.
  */
 function log(message) {
-  if (!isQuiet()) core.info(message);
+  core.debug(message);
 }
 
 /**
@@ -27827,7 +27817,7 @@ function parseBuckets(raw) {
   return buckets;
 }
 
-module.exports = { isQuiet, log, parseBuckets, VALID_BUCKETS };
+module.exports = { log, parseBuckets, VALID_BUCKETS };
 
 
 /***/ }),

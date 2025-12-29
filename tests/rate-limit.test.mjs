@@ -9,7 +9,6 @@ const rateLimitModule = await import('../src/rate-limit.js');
 const { fetchRateLimit } = rateLimitModule.default ?? rateLimitModule;
 
 const originalToken = process.env.INPUT_TOKEN;
-const originalQuiet = process.env.INPUT_QUIET;
 let stdoutSpy;
 let requestSpy;
 
@@ -20,7 +19,6 @@ describe('fetchRateLimit', () => {
 
   beforeEach(() => {
     stdoutSpy.mockClear();
-    process.env.INPUT_QUIET = 'true';
     delete process.env.INPUT_TOKEN;
   });
 
@@ -37,11 +35,6 @@ describe('fetchRateLimit', () => {
       delete process.env.INPUT_TOKEN;
     } else {
       process.env.INPUT_TOKEN = originalToken;
-    }
-    if (originalQuiet === undefined) {
-      delete process.env.INPUT_QUIET;
-    } else {
-      process.env.INPUT_QUIET = originalQuiet;
     }
   });
 
