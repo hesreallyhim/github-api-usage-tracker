@@ -124,6 +124,9 @@ async function run() {
     const outPath = (core.getInput('output_path') || '').trim();
     maybeWrite(outPath, output);
 
+    log(
+      `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
+    );
     core.summary
       .addHeading('GitHub API Usage Tracker Summary')
       .addTable(makeSummaryTable(data))

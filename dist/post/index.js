@@ -27845,16 +27845,18 @@ function formatMs(ms) {
 
 function makeSummaryTable(resources) {
   const summaryTable = [
-    { data: 'Bucket', header: true },
-    { data: 'Used', header: true },
-    { data: 'Remaining', header: true }
+    [
+      { data: 'Bucket', header: true },
+      { data: 'Used', header: true },
+      { data: 'Remaining', header: true }
+    ]
   ];
   for (const [bucket, info] of Object.entries(resources)) {
-    summaryTable.push(
+    summaryTable.push([
       { data: bucket },
       { data: String(info.used) },
       { data: String(info.remaining) }
-    );
+    ]);
   }
 
   return summaryTable;
@@ -28079,6 +28081,9 @@ async function run() {
     const outPath = (core.getInput('output_path') || '').trim();
     maybeWrite(outPath, output);
 
+    log(
+      `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
+    );
     core.summary
       .addHeading('GitHub API Usage Tracker Summary')
       .addTable(makeSummaryTable(data))

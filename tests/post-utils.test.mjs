@@ -27,15 +27,13 @@ describe('post utils', () => {
     });
 
     expect(table).toEqual([
-      { data: 'Bucket', header: true },
-      { data: 'Used', header: true },
-      { data: 'Remaining', header: true },
-      { data: 'core' },
-      { data: '3' },
-      { data: '10' },
-      { data: 'search' },
-      { data: '1' },
-      { data: '2' }
+      [
+        { data: 'Bucket', header: true },
+        { data: 'Used', header: true },
+        { data: 'Remaining', header: true }
+      ],
+      [{ data: 'core' }, { data: '3' }, { data: '10' }],
+      [{ data: 'search' }, { data: '1' }, { data: '2' }]
     ]);
   });
 });
