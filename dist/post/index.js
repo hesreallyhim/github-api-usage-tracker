@@ -28039,6 +28039,10 @@ async function run() {
     const endingLimits = await fetchRateLimit();
     const endingResources = endingLimits.resources || {};
 
+    log('[github-api-usage-tracker] Final Snapshot:');
+    log('[github-api-usage-tracker] -----------------');
+    log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
+
     const data = {};
     let totalUsed = 0;
 
