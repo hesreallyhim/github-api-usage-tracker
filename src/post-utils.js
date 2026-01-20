@@ -35,4 +35,76 @@ function makeSummaryTable(resources) {
   return summaryTable;
 }
 
-module.exports = { formatMs, makeSummaryTable };
+/**
+ * Computes usage stats for a single bucket using pre/post snapshots.
+ *
+ * @param {object} startingBucket - bucket from the pre snapshot.
+ * @param {object} endingBucket - bucket from the post snapshot.
+ * @param {number} endTimeSeconds - post snapshot time in seconds.
+ * @returns {object} usage details and validation status.
+ */
+function computeBucketUsage(startingBucket, endingBucket, endTimeSeconds) {
+  const result = {
+    valid: false,
+    used: 0,
+    remaining: undefined,
+    crossed_reset: false,
+    warnings: []
+  };
+
+  if (!startingBucket || !endingBucket) {
+    result.reason = 'missing_bucket';
+    return result;
+  }
+
+  const startingRemaining = Number(startingBucket.remaining);
+  const endingRemaining = Number(endingBucket.remaining);
+  if (!Number.isFinite(startingRemaining) || !Number.isFinite(endingRemaining)) {
+    result.reason = 'invalid_remaining';
+    return result;
+  }
+
+  const startingLimit = Number(startingBucket.limit);
+  const endingLimit = Number(endingBucket.limit);
+  const resetPre = Number(startingBucket.reset);
+  const crossedReset = Number.isFinite(resetPre) && endTimeSeconds >= resetPre;
+  result.crossed_reset = crossedReset;
+
+  let used;
+  if (crossedReset) {
+    if (!Number.isFinite(startingLimit) || !Number.isFinite(endingLimit)) {
+      result.reason = 'invalid_limit';
+      return result;
+    }
+    if (startingLimit !== endingLimit) {
+      result.warnings.push('limit_changed_across_reset');
+    }
+    used = startingLimit - startingRemaining + (endingLimit - endingRemaining);
+  } else {
+    if (
+      Number.isFinite(startingLimit) &&
+      Number.isFinite(endingLimit) &&
+      startingLimit !== endingLimit
+    ) {
+      result.reason = 'limit_changed_without_reset';
+      return result;
+    }
+    used = startingRemaining - endingRemaining;
+    if (used < 0) {
+      result.reason = 'remaining_increased_without_reset';
+      return result;
+    }
+  }
+
+  if (used < 0) {
+    result.reason = 'negative_usage';
+    return result;
+  }
+
+  result.valid = true;
+  result.used = used;
+  result.remaining = endingRemaining;
+  return result;
+}
+
+module.exports = { formatMs, makeSummaryTable, computeBucketUsage };
