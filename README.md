@@ -18,23 +18,26 @@ This action captures the rate-limit state at job start and compares it with the 
 
 ## Usage
 
+To use this action, just drop it in anywhere in your job - the pre- and post-job hooks will do all of the work.
+
 ```yaml
 jobs:
-  track:
+  search:
     runs-on: ubuntu-latest
-    outputs:
-      usage: ${{ steps.usage.outputs.usage }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: hesreallyhim/github-api-usage-tracker@v1
-        id: usage
-
-  report:
-    runs-on: ubuntu-latest
-    needs: track
-    steps:
-      - run: echo "Core API used: ${{ needs.track.outputs.usage }}"
+      - name Checkout
+        uses: actions/checkout@v4
+      - name Track Usage
+        uses: hesreallyhim/github-api-usage-tracker@v1
+      - name: Query API
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const response = await ...
+      ...
 ```
+
+After your job completes, you'll get a nice summary:
 
 <div align="center">
   <img src="assets/flow-diagram.svg" alt="API Usage Tracking Flow" width="100%"/>
@@ -74,13 +77,20 @@ Example output:
 - The action uses pre and post job hooks to snapshot the rate limit, so you only need to use it in one step - the rest will be handled automatically.
 - Output is set in the post step, so it is only available after the job completes (use job outputs if needed).
 - Logs are emitted via `core.debug()`. Enable step debug logging to view them.
+- GitHub's primary rate limits appear to use fixed windows with reset times anchored to the first observed usage of the token (per resource bucket), rather than calendar-aligned rolling windows.”
+  • GitHub’s primary rate limit for Actions using the GITHUB_TOKEN is 1,000 REST API requests per hour per repository (or 15,000 per hour per repository when accessing GitHub Enterprise Cloud resources). This limit is specific to the automatically generated GITHUB_TOKEN and is independent of the standard REST API limits for other token types.
+  Reference: GitHub Actions limits documentation — “The rate limit for GITHUB_TOKEN is 1,000 requests per hour per repository.”
+  https://docs.github.com/en/actions/reference/limits
+  • When a GitHub Actions workflow uses a different token (such as a personal access token or a GitHub App installation token), the workflow is subject to that token’s normal primary API rate limits, not the GITHUB_TOKEN Actions limit (e.g., 5,000 requests per hour for a PAT).
+  Reference: GitHub REST API rate limits documentation
+  https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 
 ---
 
-## License
-
 <div align="center">
 
-MIT © 2025 Really Him
+## License
+
+MIT © 2026 Really Him
 
 </div>
