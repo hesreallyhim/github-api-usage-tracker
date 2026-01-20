@@ -27862,7 +27862,79 @@ function makeSummaryTable(resources) {
   return summaryTable;
 }
 
-module.exports = { formatMs, makeSummaryTable };
+/**
+ * Computes usage stats for a single bucket using pre/post snapshots.
+ *
+ * @param {object} startingBucket - bucket from the pre snapshot.
+ * @param {object} endingBucket - bucket from the post snapshot.
+ * @param {number} endTimeSeconds - post snapshot time in seconds.
+ * @returns {object} usage details and validation status.
+ */
+function computeBucketUsage(startingBucket, endingBucket, endTimeSeconds) {
+  const result = {
+    valid: false,
+    used: 0,
+    remaining: undefined,
+    crossed_reset: false,
+    warnings: []
+  };
+
+  if (!startingBucket || !endingBucket) {
+    result.reason = 'missing_bucket';
+    return result;
+  }
+
+  const startingRemaining = Number(startingBucket.remaining);
+  const endingRemaining = Number(endingBucket.remaining);
+  if (!Number.isFinite(startingRemaining) || !Number.isFinite(endingRemaining)) {
+    result.reason = 'invalid_remaining';
+    return result;
+  }
+
+  const startingLimit = Number(startingBucket.limit);
+  const endingLimit = Number(endingBucket.limit);
+  const resetPre = Number(startingBucket.reset);
+  const crossedReset = Number.isFinite(resetPre) && endTimeSeconds >= resetPre;
+  result.crossed_reset = crossedReset;
+
+  let used;
+  if (crossedReset) {
+    if (!Number.isFinite(startingLimit) || !Number.isFinite(endingLimit)) {
+      result.reason = 'invalid_limit';
+      return result;
+    }
+    if (startingLimit !== endingLimit) {
+      result.warnings.push('limit_changed_across_reset');
+    }
+    used = startingLimit - startingRemaining + (endingLimit - endingRemaining);
+  } else {
+    if (
+      Number.isFinite(startingLimit) &&
+      Number.isFinite(endingLimit) &&
+      startingLimit !== endingLimit
+    ) {
+      result.reason = 'limit_changed_without_reset';
+      return result;
+    }
+    used = startingRemaining - endingRemaining;
+    if (used < 0) {
+      result.reason = 'remaining_increased_without_reset';
+      return result;
+    }
+  }
+
+  if (used < 0) {
+    result.reason = 'negative_usage';
+    return result;
+  }
+
+  result.valid = true;
+  result.used = used;
+  result.remaining = endingRemaining;
+  return result;
+}
+
+module.exports = { formatMs, makeSummaryTable, computeBucketUsage };
 
 
 /***/ }),
@@ -27980,7 +28052,7 @@ const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 const { fetchRateLimit } = __nccwpck_require__(5042);
 const { log, parseBuckets } = __nccwpck_require__(9630);
-const { formatMs, makeSummaryTable } = __nccwpck_require__(5828);
+const { formatMs, makeSummaryTable, computeBucketUsage } = __nccwpck_require__(5828);
 
 /**
  * Writes JSON-stringified data to a file if a valid pathname is provided.
@@ -28032,6 +28104,7 @@ async function run() {
       );
     }
     const endTime = Date.now();
+    const endTimeSeconds = Math.floor(endTime / 1000);
     const duration = hasStartTime ? endTime - startTime : null;
 
     log('[github-api-usage-tracker] Fetching final rate limits...');
@@ -28044,33 +28117,77 @@ async function run() {
     log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
 
     const data = {};
+    const crossedBuckets = [];
     let totalUsed = 0;
 
     for (const bucket of buckets) {
-      const startingUsed = startingResources[bucket]?.used;
-      const endingUsed = endingResources[bucket]?.used;
-      if (startingUsed === undefined) {
+      const startingBucket = startingResources[bucket];
+      const endingBucket = endingResources[bucket];
+      if (!startingBucket) {
         core.warning(
           `[github-api-usage-tracker] Starting rate limit bucket "${bucket}" not found; skipping`
         );
         continue;
       }
-      if (endingUsed === undefined) {
+      if (!endingBucket) {
         core.warning(
           `[github-api-usage-tracker] Ending rate limit bucket "${bucket}" not found; skipping`
         );
         continue;
       }
-      let used = endingUsed - startingUsed;
-      if (used < 0) {
-        core.warning(
-          `[github-api-usage-tracker] Negative usage for bucket "${bucket}" detected; clamping to 0`
-        );
-        used = 0;
+
+      const usage = computeBucketUsage(startingBucket, endingBucket, endTimeSeconds);
+      if (!usage.valid) {
+        switch (usage.reason) {
+          case 'invalid_remaining':
+            core.warning(
+              `[github-api-usage-tracker] Invalid remaining count for bucket "${bucket}"; skipping`
+            );
+            break;
+          case 'invalid_limit':
+            core.warning(
+              `[github-api-usage-tracker] Invalid limit for bucket "${bucket}" during reset crossing; skipping`
+            );
+            break;
+          case 'limit_changed_without_reset':
+            core.warning(
+              `[github-api-usage-tracker] Limit changed without reset for bucket "${bucket}"; skipping`
+            );
+            break;
+          case 'remaining_increased_without_reset':
+            core.warning(
+              `[github-api-usage-tracker] Remaining increased without reset for bucket "${bucket}"; skipping`
+            );
+            break;
+          case 'negative_usage':
+            core.warning(
+              `[github-api-usage-tracker] Negative usage for bucket "${bucket}" detected; skipping`
+            );
+            break;
+          default:
+            core.warning(
+              `[github-api-usage-tracker] Invalid usage data for bucket "${bucket}"; skipping`
+            );
+            break;
+        }
+        continue;
       }
-      const remaining = endingResources[bucket].remaining;
-      data[bucket] = { used, remaining };
-      totalUsed += used;
+
+      if (usage.warnings.includes('limit_changed_across_reset')) {
+        core.warning(
+          `[github-api-usage-tracker] Limit changed across reset for bucket "${bucket}"; results may reflect a token change`
+        );
+      }
+
+      data[bucket] = {
+        used: usage.used,
+        remaining: usage.remaining,
+        crossed_reset: usage.crossed_reset
+      };
+      if (usage.crossed_reset) {
+        crossedBuckets.push(bucket);
+      }
+      totalUsed += usage.used;
     }
 
     // Set output
@@ -28088,9 +28205,16 @@ async function run() {
     log(
       `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
     );
-    core.summary
+    const summary = core.summary
       .addHeading('GitHub API Usage Tracker Summary')
-      .addTable(makeSummaryTable(data))
+      .addTable(makeSummaryTable(data));
+    if (crossedBuckets.length > 0) {
+      summary.addRaw(
+        `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
+        true
+      );
+    }
+    summary
       .addRaw(
         `<p><strong>Action Duration:</strong> ${
           hasStartTime ? formatMs(duration) : 'Unknown (data missing)'

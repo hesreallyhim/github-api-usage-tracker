@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { formatMs, makeSummaryTable } = require('../src/post-utils.js');
+const { formatMs, makeSummaryTable, computeBucketUsage } = require('../src/post-utils.js');
 
 describe('post utils', () => {
   it('formats sub-minute durations in seconds', () => {
@@ -35,5 +35,89 @@ describe('post utils', () => {
       [{ data: 'core' }, { data: '3' }, { data: '10' }],
       [{ data: 'search' }, { data: '1' }, { data: '2' }]
     ]);
+  });
+});
+
+describe('computeBucketUsage', () => {
+  it('computes usage within the same window', () => {
+    const result = computeBucketUsage(
+      { limit: 1000, remaining: 900, reset: 1600 },
+      { limit: 1000, remaining: 850 },
+      1200
+    );
+
+    expect(result).toEqual({
+      valid: true,
+      used: 50,
+      remaining: 850,
+      crossed_reset: false,
+      warnings: []
+    });
+  });
+
+  it('marks remaining increases without reset as invalid', () => {
+    const result = computeBucketUsage(
+      { limit: 1000, remaining: 800, reset: 1600 },
+      { limit: 1000, remaining: 900 },
+      1200
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      used: 0,
+      remaining: undefined,
+      crossed_reset: false,
+      warnings: [],
+      reason: 'remaining_increased_without_reset'
+    });
+  });
+
+  it('computes usage when a reset window is crossed', () => {
+    const result = computeBucketUsage(
+      { limit: 1000, remaining: 700, reset: 1100 },
+      { limit: 1000, remaining: 900 },
+      1300
+    );
+
+    expect(result).toEqual({
+      valid: true,
+      used: 400,
+      remaining: 900,
+      crossed_reset: true,
+      warnings: []
+    });
+  });
+
+  it('warns when limits change across a reset', () => {
+    const result = computeBucketUsage(
+      { limit: 1000, remaining: 600, reset: 1100 },
+      { limit: 5000, remaining: 4700 },
+      1300
+    );
+
+    expect(result).toEqual({
+      valid: true,
+      used: 700,
+      remaining: 4700,
+      crossed_reset: true,
+      warnings: ['limit_changed_across_reset']
+    });
+  });
+
+  it('marks limit changes mid-window as invalid', () => {
+    const result = computeBucketUsage(
+      { limit: 1000, remaining: 950, reset: 1600 },
+      { limit: 5000, remaining: 4900 },
+      1200
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      used: 0,
+      remaining: undefined,
+      crossed_reset: false,
+      warnings: [],
+      reason: 'limit_changed_without_reset'
+    });
   });
 });
