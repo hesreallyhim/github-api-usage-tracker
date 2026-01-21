@@ -27,7 +27,7 @@
     "lint-staged": "16.2.7",
     "prettier": "3.8.0",
     "rimraf": "6.1.2",
-    "vitest": "4.0.16"
+    "vitest": "4.0.17"
   },
   "lint-staged": {
     "*.js": [
