@@ -1,2 +1,2 @@
-npx lint-staged
 npx npm-check-updates --enginesNode
+npm run ci
