@@ -7,6 +7,7 @@
   "type": "commonjs",
   "scripts": {
     "bundle": "rimraf dist && ncc build src/pre.js -o dist/pre && ncc build src/post.js -o dist/post && ncc build src/noop.js -o dist/noop",
+    "ci": "npm run lint && npm run format && npm test",
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
