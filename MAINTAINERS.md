@@ -5,7 +5,7 @@ This file documents the release workflow for this repository.
 ## Release automation (Release Please)
 
 - Workflow: `.github/workflows/release-please.yml`
-- Trigger: pushes to `main` (or manual run via `workflow_dispatch`)
+- Trigger: successful `CI` workflow run on `main` (or manual run via `workflow_dispatch`)
 - Behavior: opens or updates a release PR and manages `CHANGELOG.md`
 - Merge: merging the release PR creates the Git tag and GitHub Release
 
