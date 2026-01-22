@@ -16,19 +16,27 @@ function formatMs(ms) {
   return `${hours}h ${mins}m ${secs}s`;
 }
 
-function makeSummaryTable(resources) {
+function makeSummaryTable(resources, options = {}) {
+  const useMinimumHeader = Boolean(options.useMinimumHeader);
   const summaryTable = [
     [
       { data: 'Bucket', header: true },
-      { data: 'Used', header: true },
-      { data: 'Remaining', header: true }
+      { data: 'Used (Start)', header: true },
+      { data: 'Remaining (Start)', header: true },
+      { data: 'Used (End)', header: true },
+      { data: 'Remaining (End)', header: true },
+      { data: useMinimumHeader ? 'Used (Minimum)' : 'Used (Total)', header: true }
     ]
   ];
+  const formatValue = (value) => (Number.isFinite(value) ? String(value) : 'n/a');
   for (const [bucket, info] of Object.entries(resources)) {
     summaryTable.push([
       { data: bucket },
-      { data: String(info.used) },
-      { data: String(info.remaining) }
+      { data: formatValue(info.used_start) },
+      { data: formatValue(info.remaining_start) },
+      { data: formatValue(info.used_end) },
+      { data: formatValue(info.remaining_end) },
+      { data: formatValue(info.used_total) }
     ]);
   }
 
