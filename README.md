@@ -18,7 +18,7 @@ This action captures the rate-limit state at job start and compares it with the 
 
 ## Usage
 
-To use this action, just drop it in anywhere in your job - the pre- and post-job hooks will do all of the work.
+To use this action, just drop it in anywhere in your job - the pre- and post-job hooks will do all of the work. (CAVEAT: See "Reset Windows" section below for a nuance.)
 
 ```yaml
 jobs:
@@ -45,17 +45,29 @@ After your job completes, you'll get a nice summary:
 
 ## Inputs
 
-| Name        | Description                                                                                                                                                                                                    | Default               |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| token       | GitHub token used to query rate limits                                                                                                                                                                         | github.token          |
-| buckets     | Comma-separated list of rate-limit buckets to track (core,search,graphql,code_search,integration_manifest,dependency_snapshots,dependency_sbom,code_scanning_upload,actions_runner_registration,source_import) | core,search,graphql   |
-| output_path | Write usage report JSON to this path (empty to disable)                                                                                                                                                        | github_api_usage.json |
+| Name        | Description                                                                                                            | Default                       |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| token       | Name of GitHub token used to query rate limits                                                                         | github.token (`GITHUB_TOKEN`) |
+| buckets     | Comma-separated list of rate-limit buckets to track.<br>(core, search, graphql...) - see reference below for full list | core,search,graphql           |
+| output_path | Write usage report JSON to this path (empty to disable)                                                                | github_api_usage.json         |
 
 ## Outputs
 
-| Name  | Description                                                                                                    |
-| ----- | -------------------------------------------------------------------------------------------------------------- |
-| usage | JSON string with total, duration_ms, crossed_reset, and buckets_data (per-bucket used/remaining/crossed_reset) |
+| Name                                    | Description                                                         |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `total`                                 | Summation of captured queries/points used per bucket                |
+| `duration_ms`                           | Duration between first and last snapshot in milliseconds            |
+| `crossed_reset`                         | True if the snapshots crossed the rate-limit reset time (see below) |
+| `buckets_data`                          | Object keyed by bucket name with per-bucket usage data              |
+| `buckets_data.<bucket>`                 | Usage data for a specific bucket                                    |
+| `buckets_data.<bucket>.used`            | Used counts for the bucket (start, end, total)                      |
+| `buckets_data.<bucket>.used.start`      | Used count at the start snapshot (limit minus remaining)            |
+| `buckets_data.<bucket>.used.end`        | Used count at the end snapshot (limit minus remaining)              |
+| `buckets_data.<bucket>.used.total`      | Used during the job (minimum if crossed_reset is true)              |
+| `buckets_data.<bucket>.remaining`       | Remaining counts for the bucket (start, end)                        |
+| `buckets_data.<bucket>.remaining.start` | Remaining count at the start snapshot                               |
+| `buckets_data.<bucket>.remaining.end`   | Remaining count at the end snapshot                                 |
+| `buckets_data.<bucket>.crossed_reset`   | True if the bucket's reset window was crossed                       |
 
 Example output:
 
@@ -86,19 +98,31 @@ Example output:
 
 ## Notes
 
-- Usage counts may be affected by other workflows in the repo, and therefore should not be considered 100% precise as measurements of the current job.
-- The action uses pre and post job hooks to snapshot the rate limit, so you only need to use it in one step - the rest will be handled automatically.
-- Output is set in the post step, so it is only available after the job completes (use job outputs if needed).
-- Logs are emitted via `core.debug()`. Enable step debug logging to view them.
-- If a reset window is crossed for a bucket, usage for that bucket is reported as a minimum because calls between the pre-snapshot and the reset are not observable.
-- The main step captures a checkpoint snapshot; if it occurs before a reset, the minimum includes usage observed up to that checkpoint.
-- GitHub's primary rate limits appear to use fixed windows with reset times anchored to the first observed usage of the token (per resource bucket), rather than calendar-aligned rolling windows.”
-  • GitHub’s primary rate limit for Actions using the GITHUB_TOKEN is 1,000 REST API requests per hour per repository (or 15,000 per hour per repository when accessing GitHub Enterprise Cloud resources). This limit is specific to the automatically generated GITHUB_TOKEN and is independent of the standard REST API limits for other token types.
-  Reference: GitHub Actions limits documentation — “The rate limit for GITHUB_TOKEN is 1,000 requests per hour per repository.”
-  https://docs.github.com/en/actions/reference/limits
-  • When a GitHub Actions workflow uses a different token (such as a personal access token or a GitHub App installation token), the workflow is subject to that token’s normal primary API rate limits, not the GITHUB_TOKEN Actions limit (e.g., 5,000 requests per hour for a PAT).
-  Reference: GitHub REST API rate limits documentation
-  https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+### General
+
+- This action uses pre- and post-job hooks to "snapshot" the rate-limit as returned by the `/rate-limit` endpoint. Querying this endpoint does _not_ itself count against the primary rate limit.
+- Detailed logs are emitted via `core.debug()`. Enable workflow debug logging to view them (or set a `ACTIONS_STEP_DEBUG` or `ACTIONS_RUNNER_DEBUG` repository secret/variable to `true`).
+- Output is set in the post step, so it is only available after the job completes - if you want to track usage across jobs, just use the action in both jobs and aggregate the results (although this may be less reliable due to "noise" from other workflows).
+
+### Bucket Types
+
+- GitHub applies different rate limits to different API "buckets". This action tracks usage across different bucket types. The list of bucket types comprises: core, search, code_search, graphql, integration_manifest, dependency_snapshots, dependency_sbom, code_scanning_upload, actions_runner_registration, source_import.
+- Although this is undocumented, requests to `core` may _also_ appear in the `code_scanning_upload` bucket when querying the `/rate-limit` endpoint.
+
+### Token Types
+
+- GitHub’s primary rate limit for Actions using the `GITHUB_TOKEN` is 1,000 REST API requests per repository per hour (or 15,000 per repository per hour for GitHub Enterprise Cloud).
+- If you set the `token` to be a PAT, or something besides `GITHUB_TOKEN`, that token has the same rate-limit in the Action as it does elsewhere (and rate-limit "snapshots" will be impacted).
+- Despite appearances, `GITHUB_TOKEN` is an ephemeral token that is minted at the start of each job, as an app installation token from the GitHub Actions app. However, the same _rate limit_ applies to any job within the repo, even though the tokens are, strictly speaking, non-identical.
+- For this reason, the API usage measurements can only be considered precise if there is _no other job_ running concurrently with the action that you wish to track. This is also why the rate limit starting snapshot may already show non-0 usage data.
+
+### Reset Windows (Advanced Usage)
+
+- GitHub's primary rate limits appear to use fixed windows with reset times anchored to the first observed usage of the token (per resource bucket), rather than a rolling window, wherein the rate limit is "replenished" as time passes. For `core`, e.g., this is 60 minutes from the first usage within an action.
+- If the execution of a job crosses over this reset time, the "Used" value returned by querying the `/rate-limit` endpoint is _reset_ to 0 (and, similarly, "Remaining" is reset to the bucket-maximum).
+- For this reason, given the "snapshot" design of this action, total usage _cannot_ accurately be reported - any API usage that is consumed between the start of the job and reset time is effectively lost, and the final snapshot will only reflect the usage _since_ the time of reset.
+- If this happens, the Action Summary will report that a reset window has been crossed, and that usage figures can only reflect a lower bound, or minimum. Usage tracking that is accurate across a reset window can only be achieved by tracking individual requests.
+- As a partial solution, the step in which the Action is used also captures a "mid-job" snapshot; so, if you have a job that involves API usage in multiple steps, then placement of the Action does make a difference, and you should place the Action in between those steps. If the mid-job snapshot happens _after_ the earlier API calls but _before_ the reset time, that usage data will also be reported. This is meant as a convenience, or a patch - it should not be considered a reliable solution to the problem just described.
 
 ---
 
