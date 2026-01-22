@@ -6,7 +6,7 @@
   "repository": "https://github.com/hesreallyhim/github-api-usage-tracker",
   "type": "commonjs",
   "scripts": {
-    "bundle": "rimraf dist && ncc build src/pre.js -o dist/pre && ncc build src/post.js -o dist/post && ncc build src/noop.js -o dist/noop",
+    "bundle": "rimraf dist && ncc build src/pre.js -o dist/pre && ncc build src/post.js -o dist/post && ncc build src/checkpoint.js -o dist/checkpoint",
     "ci": "npm run lint && npm run format && npm test",
     "lint": "eslint .",
     "format": "prettier --check .",

@@ -26,5 +26,5 @@ outputs:
 runs:
   using: node20
   pre: dist/pre/index.js
-  main: dist/noop/index.js
+  main: dist/checkpoint/index.js
   post: dist/post/index.js
