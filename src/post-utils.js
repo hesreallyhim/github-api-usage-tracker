@@ -37,18 +37,28 @@ function makeSummaryTable(resources) {
 
 /**
  * Computes usage stats for a single bucket using pre/post snapshots.
+ * An optional checkpoint snapshot can tighten the minimum when a reset is crossed.
  *
  * @param {object} startingBucket - bucket from the pre snapshot.
  * @param {object} endingBucket - bucket from the post snapshot.
  * @param {number} endTimeSeconds - post snapshot time in seconds.
+ * @param {object} [checkpointBucket] - bucket from the checkpoint snapshot.
+ * @param {number} [checkpointTimeSeconds] - checkpoint snapshot time in seconds.
  * @returns {object} usage details and validation status.
  */
-function computeBucketUsage(startingBucket, endingBucket, endTimeSeconds) {
+function computeBucketUsage(
+  startingBucket,
+  endingBucket,
+  endTimeSeconds,
+  checkpointBucket,
+  checkpointTimeSeconds
+) {
   const result = {
     valid: false,
     used: 0,
     remaining: undefined,
     crossed_reset: false,
+    used_is_minimum: false,
     warnings: []
   };
 
@@ -79,7 +89,23 @@ function computeBucketUsage(startingBucket, endingBucket, endTimeSeconds) {
     if (startingLimit !== endingLimit) {
       result.warnings.push('limit_changed_across_reset');
     }
-    used = startingLimit - startingRemaining + (endingLimit - endingRemaining);
+    used = endingLimit - endingRemaining;
+    result.used_is_minimum = true;
+
+    if (
+      checkpointBucket &&
+      Number.isFinite(checkpointTimeSeconds) &&
+      Number.isFinite(resetPre) &&
+      checkpointTimeSeconds < resetPre
+    ) {
+      const checkpointRemaining = Number(checkpointBucket.remaining);
+      if (Number.isFinite(checkpointRemaining)) {
+        const checkpointUsed = startingRemaining - checkpointRemaining;
+        if (checkpointUsed > 0) {
+          used += checkpointUsed;
+        }
+      }
+    }
   } else {
     if (
       Number.isFinite(startingLimit) &&
