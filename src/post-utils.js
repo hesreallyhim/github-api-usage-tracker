@@ -66,7 +66,6 @@ function computeBucketUsage(
     used: 0,
     remaining: undefined,
     crossed_reset: false,
-    used_is_minimum: false,
     warnings: []
   };
 
@@ -98,7 +97,6 @@ function computeBucketUsage(
       result.warnings.push('limit_changed_across_reset');
     }
     used = endingLimit - endingRemaining;
-    result.used_is_minimum = true;
 
     if (
       checkpointBucket &&
