@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="assets/header.svg" alt="GitHub API Usage Tracker" width="600"/>
-
-<br><br>
+<img src="assets/header-banner.svg" alt="GitHub API Usage Tracker" width="700"/>
 
 [![GitHub Actions](https://img.shields.io/badge/GitHub-Action-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -18,7 +16,7 @@ This action captures the rate-limit state at job start and compares it with the 
 
 ## Usage
 
-To use this action, just drop it in anywhere in your job - the pre- and post-job hooks will do all of the work. (CAVEAT: See "Reset Windows" section below for a nuance.)
+To use this action, just drop it in anywhere in your job - the pre- and post-job hooks will do all of the work. (CAVEAT: This holds true for most use cases, but see "Reset Windows" section below.)
 
 ```yaml
 jobs:
@@ -37,11 +35,11 @@ jobs:
       ...
 ```
 
-After your job completes, you'll get a nice summary:
+After your job completes, you'll get a nice summary in the workflow UI:
 
-<div align="center">
-  <img src="assets/flow-diagram.svg" alt="API Usage Tracking Flow" width="100%"/>
-</div>
+<picture>
+  <img width="600" src="./assets/workflow-summary-example.png">
+</picture>
 
 ## Inputs
 
