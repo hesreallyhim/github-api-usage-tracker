@@ -107,6 +107,7 @@ async function run() {
     log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
 
     const data = {};
+    const summaryData = {};
     const crossedBuckets = [];
     let totalUsed = 0;
     let totalIsMinimum = false;
@@ -183,6 +184,25 @@ async function run() {
         crossed_reset: usage.crossed_reset,
         used_is_minimum: usage.used_is_minimum
       };
+      const startingRemaining = Number(startingBucket.remaining);
+      const startingLimit = Number(startingBucket.limit);
+      const endingRemaining = Number(endingBucket.remaining);
+      const endingLimit = Number(endingBucket.limit);
+      const startUsed =
+        Number.isFinite(startingLimit) && Number.isFinite(startingRemaining)
+          ? startingLimit - startingRemaining
+          : null;
+      const endUsed =
+        Number.isFinite(endingLimit) && Number.isFinite(endingRemaining)
+          ? endingLimit - endingRemaining
+          : null;
+      summaryData[bucket] = {
+        used_start: startUsed,
+        remaining_start: Number.isFinite(startingRemaining) ? startingRemaining : null,
+        used_end: endUsed,
+        remaining_end: Number.isFinite(endingRemaining) ? endingRemaining : null,
+        used_total: usage.used
+      };
       if (usage.crossed_reset) {
         crossedBuckets.push(bucket);
       }
@@ -210,7 +230,7 @@ async function run() {
     );
     const summary = core.summary
       .addHeading('GitHub API Usage Tracker Summary')
-      .addTable(makeSummaryTable(data));
+      .addTable(makeSummaryTable(summaryData, { useMinimumHeader: totalIsMinimum }));
     if (crossedBuckets.length > 0) {
       summary.addRaw(
         `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,

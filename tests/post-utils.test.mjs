@@ -22,18 +22,47 @@ describe('post utils', () => {
 
   it('builds a summary table with stringified counts', () => {
     const table = makeSummaryTable({
-      core: { used: 3, remaining: 10 },
-      search: { used: 1, remaining: 2 }
+      core: {
+        used_start: 3,
+        remaining_start: 10,
+        used_end: 5,
+        remaining_end: 8,
+        used_total: 2
+      },
+      search: {
+        used_start: 1,
+        remaining_start: 2,
+        used_end: 1,
+        remaining_end: 2,
+        used_total: 0
+      }
     });
 
     expect(table).toEqual([
       [
         { data: 'Bucket', header: true },
-        { data: 'Used', header: true },
-        { data: 'Remaining', header: true }
+        { data: 'Used (Start)', header: true },
+        { data: 'Remaining (Start)', header: true },
+        { data: 'Used (End)', header: true },
+        { data: 'Remaining (End)', header: true },
+        { data: 'Used (Total)', header: true }
       ],
-      [{ data: 'core' }, { data: '3' }, { data: '10' }],
-      [{ data: 'search' }, { data: '1' }, { data: '2' }]
+      [
+        { data: 'core' },
+        { data: '3' },
+        { data: '10' },
+        { data: '5' },
+        { data: '8' },
+        { data: '2' }
+      ],
+      [
+        { data: 'search' },
+        { data: '1' },
+        { data: '2' },
+        { data: '1' },
+        { data: '2' },
+        { data: '0' }
+      ]
     ]);
   });
 });
