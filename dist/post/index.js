@@ -27868,13 +27868,15 @@ function makeSummaryTable(resources, options = {}) {
   ];
   const formatValue = (value) => (Number.isFinite(value) ? String(value) : 'n/a');
   for (const [bucket, info] of Object.entries(resources)) {
+    const used = info.used || {};
+    const remaining = info.remaining || {};
     summaryTable.push([
       { data: bucket },
-      { data: formatValue(info.used_start) },
-      { data: formatValue(info.remaining_start) },
-      { data: formatValue(info.used_end) },
-      { data: formatValue(info.remaining_end) },
-      { data: formatValue(info.used_total) }
+      { data: formatValue(used.start) },
+      { data: formatValue(remaining.start) },
+      { data: formatValue(used.end) },
+      { data: formatValue(remaining.end) },
+      { data: formatValue(used.total) }
     ]);
   }
 
@@ -28179,7 +28181,6 @@ async function run() {
     log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
 
     const data = {};
-    const summaryData = {};
     const crossedBuckets = [];
     let totalUsed = 0;
     let totalIsMinimum = false;
@@ -28250,11 +28251,6 @@ async function run() {
         );
       }
 
-      data[bucket] = {
-        used: usage.used,
-        remaining: usage.remaining,
-        crossed_reset: usage.crossed_reset
-      };
       const startingRemaining = Number(startingBucket.remaining);
       const startingLimit = Number(startingBucket.limit);
       const endingRemaining = Number(endingBucket.remaining);
@@ -28267,12 +28263,17 @@ async function run() {
         Number.isFinite(endingLimit) && Number.isFinite(endingRemaining)
           ? endingLimit - endingRemaining
           : null;
-      summaryData[bucket] = {
-        used_start: startUsed,
-        remaining_start: Number.isFinite(startingRemaining) ? startingRemaining : null,
-        used_end: endUsed,
-        remaining_end: Number.isFinite(endingRemaining) ? endingRemaining : null,
-        used_total: usage.used
+      data[bucket] = {
+        used: {
+          start: startUsed,
+          end: endUsed,
+          total: usage.used
+        },
+        remaining: {
+          start: Number.isFinite(startingRemaining) ? startingRemaining : null,
+          end: Number.isFinite(endingRemaining) ? endingRemaining : null
+        },
+        crossed_reset: usage.crossed_reset
       };
       if (usage.crossed_reset) {
         crossedBuckets.push(bucket);
@@ -28288,9 +28289,9 @@ async function run() {
       total: totalUsed,
       duration_ms: duration,
       buckets_data: data,
-      total_is_minimum: totalIsMinimum
+      crossed_reset: totalIsMinimum
     };
-    core.setOutput('usage', JSON.stringify(output));
+    core.setOutput('usage', JSON.stringify(output, null, 2));
 
     // Write JSON file if path specified
     const outPath = (core.getInput('output_path') || '').trim();
@@ -28301,26 +28302,28 @@ async function run() {
     );
     const summary = core.summary
       .addHeading('GitHub API Usage Tracker Summary')
-      .addTable(makeSummaryTable(summaryData, { useMinimumHeader: totalIsMinimum }));
+      .addTable(makeSummaryTable(data, { useMinimumHeader: totalIsMinimum }));
     if (crossedBuckets.length > 0) {
       summary.addRaw(
         `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
         true
       );
       summary.addRaw(
-        '<p><strong>Usage Note:</strong> Usage values are minimums; calls between the pre-snapshot and the reset are not observable.</p>',
+        '<p><strong>Total Usage:</strong> Total usage cannot be computed - usage reset window was crossed.</p>',
         true
       );
+      summary.addRaw(`<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
     }
-    summary
-      .addRaw(
-        `<p><strong>Action Duration:</strong> ${
-          hasStartTime ? formatMs(duration) : 'Unknown (data missing)'
-        }</p>`,
-        true
-      )
-      .addRaw(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`, true)
-      .write();
+    summary.addRaw(
+      `<p><strong>Action Duration:</strong> ${
+        hasStartTime ? formatMs(duration) : 'Unknown (data missing)'
+      }</p>`,
+      true
+    );
+    if (crossedBuckets.length === 0) {
+      summary.addRaw(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
+    }
+    summary.write();
   } catch (err) {
     core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);
   }

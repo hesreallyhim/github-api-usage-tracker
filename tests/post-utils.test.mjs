@@ -23,18 +23,12 @@ describe('post utils', () => {
   it('builds a summary table with stringified counts', () => {
     const table = makeSummaryTable({
       core: {
-        used_start: 3,
-        remaining_start: 10,
-        used_end: 5,
-        remaining_end: 8,
-        used_total: 2
+        used: { start: 3, end: 5, total: 2 },
+        remaining: { start: 10, end: 8 }
       },
       search: {
-        used_start: 1,
-        remaining_start: 2,
-        used_end: 1,
-        remaining_end: 2,
-        used_total: 0
+        used: { start: 1, end: 1, total: 0 },
+        remaining: { start: 2, end: 2 }
       }
     });
 
