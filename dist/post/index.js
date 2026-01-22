@@ -27904,7 +27904,6 @@ function computeBucketUsage(
     used: 0,
     remaining: undefined,
     crossed_reset: false,
-    used_is_minimum: false,
     warnings: []
   };
 
@@ -27936,7 +27935,6 @@ function computeBucketUsage(
       result.warnings.push('limit_changed_across_reset');
     }
     used = endingLimit - endingRemaining;
-    result.used_is_minimum = true;
 
     if (
       checkpointBucket &&
@@ -28255,8 +28253,7 @@ async function run() {
       data[bucket] = {
         used: usage.used,
         remaining: usage.remaining,
-        crossed_reset: usage.crossed_reset,
-        used_is_minimum: usage.used_is_minimum
+        crossed_reset: usage.crossed_reset
       };
       const startingRemaining = Number(startingBucket.remaining);
       const startingLimit = Number(startingBucket.limit);
@@ -28280,7 +28277,7 @@ async function run() {
       if (usage.crossed_reset) {
         crossedBuckets.push(bucket);
       }
-      if (usage.used_is_minimum) {
+      if (usage.crossed_reset) {
         totalIsMinimum = true;
       }
       totalUsed += usage.used;

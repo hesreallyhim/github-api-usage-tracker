@@ -53,9 +53,9 @@ After your job completes, you'll get a nice summary:
 
 ## Outputs
 
-| Name  | Description                                                                                                                       |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------- |
-| usage | JSON string with total, duration_ms, total_is_minimum, and buckets_data (per-bucket used/remaining/crossed_reset/used_is_minimum) |
+| Name  | Description                                                                                                       |
+| ----- | ----------------------------------------------------------------------------------------------------------------- |
+| usage | JSON string with total, duration_ms, total_is_minimum, and buckets_data (per-bucket used/remaining/crossed_reset) |
 
 Example output:
 
@@ -65,9 +65,9 @@ Example output:
   "duration_ms": 12345,
   "total_is_minimum": false,
   "buckets_data": {
-    "core": { "used": 45, "remaining": 4955, "crossed_reset": false, "used_is_minimum": false },
-    "graphql": { "used": 10, "remaining": 4990, "crossed_reset": false, "used_is_minimum": false },
-    "search": { "used": 5, "remaining": 25, "crossed_reset": false, "used_is_minimum": false }
+    "core": { "used": 45, "remaining": 4955, "crossed_reset": false },
+    "graphql": { "used": 10, "remaining": 4990, "crossed_reset": false },
+    "search": { "used": 5, "remaining": 25, "crossed_reset": false }
   }
 }
 ```

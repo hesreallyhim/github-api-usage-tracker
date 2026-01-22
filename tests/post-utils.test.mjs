@@ -80,7 +80,6 @@ describe('computeBucketUsage', () => {
       used: 50,
       remaining: 850,
       crossed_reset: false,
-      used_is_minimum: false,
       warnings: []
     });
   });
@@ -97,7 +96,6 @@ describe('computeBucketUsage', () => {
       used: 0,
       remaining: undefined,
       crossed_reset: false,
-      used_is_minimum: false,
       warnings: [],
       reason: 'remaining_increased_without_reset'
     });
@@ -115,7 +113,6 @@ describe('computeBucketUsage', () => {
       used: 100,
       remaining: 900,
       crossed_reset: true,
-      used_is_minimum: true,
       warnings: []
     });
   });
@@ -134,7 +131,6 @@ describe('computeBucketUsage', () => {
       used: 150,
       remaining: 900,
       crossed_reset: true,
-      used_is_minimum: true,
       warnings: []
     });
   });
@@ -151,7 +147,6 @@ describe('computeBucketUsage', () => {
       used: 300,
       remaining: 4700,
       crossed_reset: true,
-      used_is_minimum: true,
       warnings: ['limit_changed_across_reset']
     });
   });
@@ -168,7 +163,6 @@ describe('computeBucketUsage', () => {
       used: 0,
       remaining: undefined,
       crossed_reset: false,
-      used_is_minimum: false,
       warnings: [],
       reason: 'limit_changed_without_reset'
     });
