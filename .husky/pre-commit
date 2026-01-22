@@ -1,2 +1,2 @@
 npx npm-check-updates --enginesNode
-npm run ci
+npm run test:ci
