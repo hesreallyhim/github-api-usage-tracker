@@ -74,6 +74,25 @@ async function run() {
         '[github-api-usage-tracker] Invalid or missing start time; duration will be reported as unknown'
       );
     }
+    const checkpointState = core.getState('checkpoint_rate_limits');
+    let checkpointResources;
+    let checkpointTimeSeconds = null;
+    if (checkpointState) {
+      try {
+        checkpointResources = JSON.parse(checkpointState);
+      } catch {
+        core.warning(
+          '[github-api-usage-tracker] Failed to parse checkpoint rate limit data; ignoring checkpoint snapshot'
+        );
+      }
+    }
+    if (checkpointResources) {
+      const checkpointTimeMs = Number(core.getState('checkpoint_time'));
+      checkpointTimeSeconds =
+        Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
+          ? Math.floor(checkpointTimeMs / 1000)
+          : null;
+    }
     const endTime = Date.now();
     const endTimeSeconds = Math.floor(endTime / 1000);
     const duration = hasStartTime ? endTime - startTime : null;
@@ -90,6 +109,7 @@ async function run() {
     const data = {};
     const crossedBuckets = [];
     let totalUsed = 0;
+    let totalIsMinimum = false;
 
     for (const bucket of buckets) {
       const startingBucket = startingResources[bucket];
@@ -107,7 +127,14 @@ async function run() {
         continue;
       }
 
-      const usage = computeBucketUsage(startingBucket, endingBucket, endTimeSeconds);
+      const checkpointBucket = checkpointResources ? checkpointResources[bucket] : undefined;
+      const usage = computeBucketUsage(
+        startingBucket,
+        endingBucket,
+        endTimeSeconds,
+        checkpointBucket,
+        checkpointTimeSeconds
+      );
       if (!usage.valid) {
         switch (usage.reason) {
           case 'invalid_remaining':
@@ -153,10 +180,14 @@ async function run() {
       data[bucket] = {
         used: usage.used,
         remaining: usage.remaining,
-        crossed_reset: usage.crossed_reset
+        crossed_reset: usage.crossed_reset,
+        used_is_minimum: usage.used_is_minimum
       };
       if (usage.crossed_reset) {
         crossedBuckets.push(bucket);
+      }
+      if (usage.used_is_minimum) {
+        totalIsMinimum = true;
       }
       totalUsed += usage.used;
     }
@@ -165,7 +196,8 @@ async function run() {
     const output = {
       total: totalUsed,
       duration_ms: duration,
-      buckets_data: data
+      buckets_data: data,
+      total_is_minimum: totalIsMinimum
     };
     core.setOutput('usage', JSON.stringify(output));
 
@@ -182,6 +214,10 @@ async function run() {
     if (crossedBuckets.length > 0) {
       summary.addRaw(
         `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
+        true
+      );
+      summary.addRaw(
+        '<p><strong>Usage Note:</strong> Usage values are minimums; calls between the pre-snapshot and the reset are not observable.</p>',
         true
       );
     }

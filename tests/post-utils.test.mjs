@@ -51,6 +51,7 @@ describe('computeBucketUsage', () => {
       used: 50,
       remaining: 850,
       crossed_reset: false,
+      used_is_minimum: false,
       warnings: []
     });
   });
@@ -67,6 +68,7 @@ describe('computeBucketUsage', () => {
       used: 0,
       remaining: undefined,
       crossed_reset: false,
+      used_is_minimum: false,
       warnings: [],
       reason: 'remaining_increased_without_reset'
     });
@@ -81,9 +83,29 @@ describe('computeBucketUsage', () => {
 
     expect(result).toEqual({
       valid: true,
-      used: 400,
+      used: 100,
       remaining: 900,
       crossed_reset: true,
+      used_is_minimum: true,
+      warnings: []
+    });
+  });
+
+  it('adds checkpoint usage before reset to the minimum', () => {
+    const result = computeBucketUsage(
+      { limit: 1000, remaining: 700, reset: 1100 },
+      { limit: 1000, remaining: 900 },
+      1300,
+      { limit: 1000, remaining: 650 },
+      1000
+    );
+
+    expect(result).toEqual({
+      valid: true,
+      used: 150,
+      remaining: 900,
+      crossed_reset: true,
+      used_is_minimum: true,
       warnings: []
     });
   });
@@ -97,9 +119,10 @@ describe('computeBucketUsage', () => {
 
     expect(result).toEqual({
       valid: true,
-      used: 700,
+      used: 300,
       remaining: 4700,
       crossed_reset: true,
+      used_is_minimum: true,
       warnings: ['limit_changed_across_reset']
     });
   });
@@ -116,6 +139,7 @@ describe('computeBucketUsage', () => {
       used: 0,
       remaining: undefined,
       crossed_reset: false,
+      used_is_minimum: false,
       warnings: [],
       reason: 'limit_changed_without_reset'
     });

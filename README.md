@@ -53,9 +53,9 @@ After your job completes, you'll get a nice summary:
 
 ## Outputs
 
-| Name  | Description                                                                       |
-| ----- | --------------------------------------------------------------------------------- |
-| usage | JSON string with total, duration_ms, and buckets_data (per-bucket used/remaining) |
+| Name  | Description                                                                                                                       |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------- |
+| usage | JSON string with total, duration_ms, total_is_minimum, and buckets_data (per-bucket used/remaining/crossed_reset/used_is_minimum) |
 
 Example output:
 
@@ -63,10 +63,11 @@ Example output:
 {
   "total": 60,
   "duration_ms": 12345,
+  "total_is_minimum": false,
   "buckets_data": {
-    "core": { "used": 45, "remaining": 4955 },
-    "graphql": { "used": 10, "remaining": 4990 },
-    "search": { "used": 5, "remaining": 25 }
+    "core": { "used": 45, "remaining": 4955, "crossed_reset": false, "used_is_minimum": false },
+    "graphql": { "used": 10, "remaining": 4990, "crossed_reset": false, "used_is_minimum": false },
+    "search": { "used": 5, "remaining": 25, "crossed_reset": false, "used_is_minimum": false }
   }
 }
 ```
@@ -77,6 +78,8 @@ Example output:
 - The action uses pre and post job hooks to snapshot the rate limit, so you only need to use it in one step - the rest will be handled automatically.
 - Output is set in the post step, so it is only available after the job completes (use job outputs if needed).
 - Logs are emitted via `core.debug()`. Enable step debug logging to view them.
+- If a reset window is crossed for a bucket, usage for that bucket is reported as a minimum because calls between the pre-snapshot and the reset are not observable.
+- The main step captures a checkpoint snapshot; if it occurs before a reset, the minimum includes usage observed up to that checkpoint.
 - GitHub's primary rate limits appear to use fixed windows with reset times anchored to the first observed usage of the token (per resource bucket), rather than calendar-aligned rolling windows.”
   • GitHub’s primary rate limit for Actions using the GITHUB_TOKEN is 1,000 REST API requests per hour per repository (or 15,000 per hour per repository when accessing GitHub Enterprise Cloud resources). This limit is specific to the automatically generated GITHUB_TOKEN and is independent of the standard REST API limits for other token types.
   Reference: GitHub Actions limits documentation — “The rate limit for GITHUB_TOKEN is 1,000 requests per hour per repository.”
