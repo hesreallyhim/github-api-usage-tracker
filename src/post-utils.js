@@ -30,13 +30,15 @@ function makeSummaryTable(resources, options = {}) {
   ];
   const formatValue = (value) => (Number.isFinite(value) ? String(value) : 'n/a');
   for (const [bucket, info] of Object.entries(resources)) {
+    const used = info.used || {};
+    const remaining = info.remaining || {};
     summaryTable.push([
       { data: bucket },
-      { data: formatValue(info.used_start) },
-      { data: formatValue(info.remaining_start) },
-      { data: formatValue(info.used_end) },
-      { data: formatValue(info.remaining_end) },
-      { data: formatValue(info.used_total) }
+      { data: formatValue(used.start) },
+      { data: formatValue(remaining.start) },
+      { data: formatValue(used.end) },
+      { data: formatValue(remaining.end) },
+      { data: formatValue(used.total) }
     ]);
   }
 

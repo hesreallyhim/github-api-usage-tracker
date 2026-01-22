@@ -53,9 +53,9 @@ After your job completes, you'll get a nice summary:
 
 ## Outputs
 
-| Name  | Description                                                                                                       |
-| ----- | ----------------------------------------------------------------------------------------------------------------- |
-| usage | JSON string with total, duration_ms, total_is_minimum, and buckets_data (per-bucket used/remaining/crossed_reset) |
+| Name  | Description                                                                                                    |
+| ----- | -------------------------------------------------------------------------------------------------------------- |
+| usage | JSON string with total, duration_ms, crossed_reset, and buckets_data (per-bucket used/remaining/crossed_reset) |
 
 Example output:
 
@@ -63,11 +63,23 @@ Example output:
 {
   "total": 60,
   "duration_ms": 12345,
-  "total_is_minimum": false,
+  "crossed_reset": false,
   "buckets_data": {
-    "core": { "used": 45, "remaining": 4955, "crossed_reset": false },
-    "graphql": { "used": 10, "remaining": 4990, "crossed_reset": false },
-    "search": { "used": 5, "remaining": 25, "crossed_reset": false }
+    "core": {
+      "used": { "start": 5, "end": 50, "total": 45 },
+      "remaining": { "start": 4995, "end": 4950 },
+      "crossed_reset": false
+    },
+    "graphql": {
+      "used": { "start": 0, "end": 10, "total": 10 },
+      "remaining": { "start": 5000, "end": 4990 },
+      "crossed_reset": false
+    },
+    "search": {
+      "used": { "start": 0, "end": 5, "total": 5 },
+      "remaining": { "start": 30, "end": 25 },
+      "crossed_reset": false
+    }
   }
 }
 ```
