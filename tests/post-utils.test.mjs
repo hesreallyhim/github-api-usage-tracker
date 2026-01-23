@@ -59,6 +59,41 @@ describe('post utils', () => {
       ]
     ]);
   });
+
+  it('uses minimum header and formats non-numeric values as n/a', () => {
+    const table = makeSummaryTable(
+      {
+        core: {
+          used: { start: null, end: undefined, total: NaN },
+          remaining: { start: undefined, end: null }
+        }
+      },
+      { useMinimumHeader: true }
+    );
+
+    expect(table[0][5]).toEqual({ data: 'Used (Minimum)', header: true });
+    expect(table[1]).toEqual([
+      { data: 'core' },
+      { data: 'n/a' },
+      { data: 'n/a' },
+      { data: 'n/a' },
+      { data: 'n/a' },
+      { data: 'n/a' }
+    ]);
+  });
+
+  it('handles missing usage info in summary table rows', () => {
+    const table = makeSummaryTable({ core: {} });
+
+    expect(table[1]).toEqual([
+      { data: 'core' },
+      { data: 'n/a' },
+      { data: 'n/a' },
+      { data: 'n/a' },
+      { data: 'n/a' },
+      { data: 'n/a' }
+    ]);
+  });
 });
 
 describe('computeBucketUsage', () => {
@@ -129,6 +164,42 @@ describe('computeBucketUsage', () => {
     });
   });
 
+  it('ignores non-numeric checkpoint remaining values', () => {
+    const result = computeBucketUsage(
+      { limit: 10, remaining: 5, reset: 100 },
+      { limit: 10, remaining: 7 },
+      200,
+      { limit: 10, remaining: 'nope' },
+      50
+    );
+
+    expect(result).toEqual({
+      valid: true,
+      used: 3,
+      remaining: 7,
+      crossed_reset: true,
+      warnings: []
+    });
+  });
+
+  it('does not add checkpoint usage when usage is not positive', () => {
+    const result = computeBucketUsage(
+      { limit: 10, remaining: 5, reset: 100 },
+      { limit: 10, remaining: 7 },
+      200,
+      { limit: 10, remaining: 6 },
+      50
+    );
+
+    expect(result).toEqual({
+      valid: true,
+      used: 3,
+      remaining: 7,
+      crossed_reset: true,
+      warnings: []
+    });
+  });
+
   it('warns when limits change across a reset', () => {
     const result = computeBucketUsage(
       { limit: 1000, remaining: 600, reset: 1100 },
@@ -159,6 +230,70 @@ describe('computeBucketUsage', () => {
       crossed_reset: false,
       warnings: [],
       reason: 'limit_changed_without_reset'
+    });
+  });
+
+  it('returns missing bucket errors when inputs are absent', () => {
+    const result = computeBucketUsage(null, { limit: 10, remaining: 9 }, 1200);
+
+    expect(result).toEqual({
+      valid: false,
+      used: 0,
+      remaining: undefined,
+      crossed_reset: false,
+      warnings: [],
+      reason: 'missing_bucket'
+    });
+  });
+
+  it('marks invalid remaining values as invalid', () => {
+    const result = computeBucketUsage(
+      { limit: 10, remaining: 'nope', reset: 1600 },
+      { limit: 10, remaining: 9 },
+      1200
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      used: 0,
+      remaining: undefined,
+      crossed_reset: false,
+      warnings: [],
+      reason: 'invalid_remaining'
+    });
+  });
+
+  it('marks invalid limits across resets as invalid', () => {
+    const result = computeBucketUsage(
+      { limit: 'nope', remaining: 5, reset: 100 },
+      { limit: 10, remaining: 3 },
+      1200
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      used: 0,
+      remaining: undefined,
+      crossed_reset: true,
+      warnings: [],
+      reason: 'invalid_limit'
+    });
+  });
+
+  it('marks negative usage across resets as invalid', () => {
+    const result = computeBucketUsage(
+      { limit: 10, remaining: 5, reset: 100 },
+      { limit: 10, remaining: 20 },
+      1200
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      used: 0,
+      remaining: undefined,
+      crossed_reset: true,
+      warnings: [],
+      reason: 'negative_usage'
     });
   });
 });

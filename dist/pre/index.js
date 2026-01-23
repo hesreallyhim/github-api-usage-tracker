@@ -27833,6 +27833,56 @@ module.exports = { log, parseBuckets, VALID_BUCKETS };
 
 /***/ }),
 
+/***/ 7077:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const core = __nccwpck_require__(7484);
+const { fetchRateLimit } = __nccwpck_require__(5042);
+const { log } = __nccwpck_require__(9630);
+
+async function run(overrides = {}) {
+  const deps = {
+    core,
+    fetchRateLimit,
+    log,
+    ...overrides
+  };
+  try {
+    const token = deps.core.getInput('token');
+
+    if (!token) {
+      deps.core.error('GitHub token is required for API Usage Tracker');
+      deps.core.saveState('skip_post', 'true');
+      return;
+    }
+
+    const startTime = Date.now();
+    deps.core.saveState('start_time', String(startTime));
+
+    deps.log('[github-api-usage-tracker] Fetching initial rate limits...');
+
+    const limits = await deps.fetchRateLimit();
+    const resources = limits.resources || {};
+
+    deps.log('[github-api-usage-tracker] Initial Snapshot:');
+    deps.log('[github-api-usage-tracker] -----------------');
+    deps.log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
+
+    deps.core.saveState('starting_rate_limits', JSON.stringify(resources));
+  } catch (err) {
+    deps.core.warning(`Pre step failed: ${err.message}`);
+  }
+}
+
+if (require.main === require.cache[eval('__filename')]) {
+  run();
+}
+
+module.exports = { run };
+
+
+/***/ }),
+
 /***/ 5042:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -27920,41 +27970,12 @@ module.exports = { fetchRateLimit };
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-var __webpack_exports__ = {};
-const core = __nccwpck_require__(7484);
-const { fetchRateLimit } = __nccwpck_require__(5042);
-const { log } = __nccwpck_require__(9630);
-
-async function run() {
-  try {
-    const token = core.getInput('token');
-
-    if (!token) {
-      core.error('GitHub token is required for API Usage Tracker');
-      core.saveState('skip_post', 'true');
-      return;
-    }
-
-    const startTime = Date.now();
-    core.saveState('start_time', String(startTime));
-
-    log('[github-api-usage-tracker] Fetching initial rate limits...');
-
-    const limits = await fetchRateLimit();
-    const resources = limits.resources || {};
-
-    log('[github-api-usage-tracker] Initial Snapshot:');
-    log('[github-api-usage-tracker] -----------------');
-    log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
-
-    core.saveState('starting_rate_limits', JSON.stringify(resources));
-  } catch (err) {
-    core.warning(`Pre step failed: ${err.message}`);
-  }
-}
-
-run();
-
-module.exports = __webpack_exports__;
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module is referenced by other modules so it can't be inlined
+/******/ 	var __webpack_exports__ = __nccwpck_require__(7077);
+/******/ 	module.exports = __webpack_exports__;
+/******/ 	
 /******/ })()
 ;

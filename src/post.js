@@ -30,30 +30,44 @@ const { formatMs, makeSummaryTable, computeBucketUsage } = require('./post-utils
  *
  * @param {string} pathname - file path to write to.
  * @param {object} data - data to write.
+ * @param {object} fsModule - fs implementation to use.
+ * @param {object} pathModule - path implementation to use.
  */
-function maybeWrite(pathname, data) {
+function maybeWrite(pathname, data, fsModule, pathModule) {
   if (!pathname) return;
-  const dir = path.dirname(pathname);
-  if (dir && dir !== '.') fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(pathname, JSON.stringify(data, null, 2));
+  const dir = pathModule.dirname(pathname);
+  if (dir && dir !== '.') fsModule.mkdirSync(dir, { recursive: true });
+  fsModule.writeFileSync(pathname, JSON.stringify(data, null, 2));
 }
 
-async function run() {
-  if (core.getState('skip_post') === 'true') {
-    log('[github-api-usage-tracker] Skipping post step due to missing token');
+async function run(overrides = {}) {
+  const deps = {
+    core,
+    fs,
+    path,
+    fetchRateLimit,
+    log,
+    parseBuckets,
+    formatMs,
+    makeSummaryTable,
+    computeBucketUsage,
+    ...overrides
+  };
+  if (deps.core.getState('skip_post') === 'true') {
+    deps.log('[github-api-usage-tracker] Skipping post step due to missing token');
     return;
   }
   try {
-    const buckets = parseBuckets(core.getInput('buckets'));
+    const buckets = deps.parseBuckets(deps.core.getInput('buckets'));
 
     if (buckets.length === 0) {
-      log('[github-api-usage-tracker] No valid buckets specified for tracking');
+      deps.log('[github-api-usage-tracker] No valid buckets specified for tracking');
       return;
     }
 
-    const startingState = core.getState('starting_rate_limits');
+    const startingState = deps.core.getState('starting_rate_limits');
     if (!startingState) {
-      core.error(
+      deps.core.error(
         '[github-api-usage-tracker] No starting rate limit data found; skipping post step'
       );
       return;
@@ -62,32 +76,32 @@ async function run() {
     try {
       startingResources = JSON.parse(startingState);
     } catch {
-      core.error(
+      deps.core.error(
         '[github-api-usage-tracker] Failed to parse starting rate limit data; skipping post step'
       );
       return;
     }
-    const startTime = Number(core.getState('start_time'));
+    const startTime = Number(deps.core.getState('start_time'));
     const hasStartTime = Number.isFinite(startTime);
     if (!hasStartTime) {
-      core.error(
+      deps.core.error(
         '[github-api-usage-tracker] Invalid or missing start time; duration will be reported as unknown'
       );
     }
-    const checkpointState = core.getState('checkpoint_rate_limits');
+    const checkpointState = deps.core.getState('checkpoint_rate_limits');
     let checkpointResources;
     let checkpointTimeSeconds = null;
     if (checkpointState) {
       try {
         checkpointResources = JSON.parse(checkpointState);
       } catch {
-        core.warning(
+        deps.core.warning(
           '[github-api-usage-tracker] Failed to parse checkpoint rate limit data; ignoring checkpoint snapshot'
         );
       }
     }
     if (checkpointResources) {
-      const checkpointTimeMs = Number(core.getState('checkpoint_time'));
+      const checkpointTimeMs = Number(deps.core.getState('checkpoint_time'));
       checkpointTimeSeconds =
         Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
           ? Math.floor(checkpointTimeMs / 1000)
@@ -97,14 +111,14 @@ async function run() {
     const endTimeSeconds = Math.floor(endTime / 1000);
     const duration = hasStartTime ? endTime - startTime : null;
 
-    log('[github-api-usage-tracker] Fetching final rate limits...');
+    deps.log('[github-api-usage-tracker] Fetching final rate limits...');
 
-    const endingLimits = await fetchRateLimit();
+    const endingLimits = await deps.fetchRateLimit();
     const endingResources = endingLimits.resources || {};
 
-    log('[github-api-usage-tracker] Final Snapshot:');
-    log('[github-api-usage-tracker] -----------------');
-    log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
+    deps.log('[github-api-usage-tracker] Final Snapshot:');
+    deps.log('[github-api-usage-tracker] -----------------');
+    deps.log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
 
     const data = {};
     const crossedBuckets = [];
@@ -115,20 +129,20 @@ async function run() {
       const startingBucket = startingResources[bucket];
       const endingBucket = endingResources[bucket];
       if (!startingBucket) {
-        core.warning(
+        deps.core.warning(
           `[github-api-usage-tracker] Starting rate limit bucket "${bucket}" not found; skipping`
         );
         continue;
       }
       if (!endingBucket) {
-        core.warning(
+        deps.core.warning(
           `[github-api-usage-tracker] Ending rate limit bucket "${bucket}" not found; skipping`
         );
         continue;
       }
 
       const checkpointBucket = checkpointResources ? checkpointResources[bucket] : undefined;
-      const usage = computeBucketUsage(
+      const usage = deps.computeBucketUsage(
         startingBucket,
         endingBucket,
         endTimeSeconds,
@@ -138,32 +152,32 @@ async function run() {
       if (!usage.valid) {
         switch (usage.reason) {
           case 'invalid_remaining':
-            core.warning(
+            deps.core.warning(
               `[github-api-usage-tracker] Invalid remaining count for bucket "${bucket}"; skipping`
             );
             break;
           case 'invalid_limit':
-            core.warning(
+            deps.core.warning(
               `[github-api-usage-tracker] Invalid limit for bucket "${bucket}" during reset crossing; skipping`
             );
             break;
           case 'limit_changed_without_reset':
-            core.warning(
+            deps.core.warning(
               `[github-api-usage-tracker] Limit changed without reset for bucket "${bucket}"; skipping`
             );
             break;
           case 'remaining_increased_without_reset':
-            core.warning(
+            deps.core.warning(
               `[github-api-usage-tracker] Remaining increased without reset for bucket "${bucket}"; skipping`
             );
             break;
           case 'negative_usage':
-            core.warning(
+            deps.core.warning(
               `[github-api-usage-tracker] Negative usage for bucket "${bucket}" detected; skipping`
             );
             break;
           default:
-            core.warning(
+            deps.core.warning(
               `[github-api-usage-tracker] Invalid usage data for bucket "${bucket}"; skipping`
             );
             break;
@@ -172,7 +186,7 @@ async function run() {
       }
 
       if (usage.warnings.includes('limit_changed_across_reset')) {
-        core.warning(
+        deps.core.warning(
           `[github-api-usage-tracker] Limit changed across reset for bucket "${bucket}"; results may reflect a token change`
         );
       }
@@ -217,18 +231,18 @@ async function run() {
       buckets_data: data,
       crossed_reset: totalIsMinimum
     };
-    core.setOutput('usage', JSON.stringify(output, null, 2));
+    deps.core.setOutput('usage', JSON.stringify(output, null, 2));
 
     // Write JSON file if path specified
-    const outPath = (core.getInput('output_path') || '').trim();
-    maybeWrite(outPath, output);
+    const outPath = (deps.core.getInput('output_path') || '').trim();
+    maybeWrite(outPath, output, deps.fs, deps.path);
 
-    log(
+    deps.log(
       `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
     );
-    const summary = core.summary
+    const summary = deps.core.summary
       .addHeading('GitHub API Usage Tracker Summary')
-      .addTable(makeSummaryTable(data, { useMinimumHeader: totalIsMinimum }));
+      .addTable(deps.makeSummaryTable(data, { useMinimumHeader: totalIsMinimum }));
     if (crossedBuckets.length > 0) {
       summary.addRaw(
         `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
@@ -242,7 +256,7 @@ async function run() {
     }
     summary.addRaw(
       `<p><strong>Action Duration:</strong> ${
-        hasStartTime ? formatMs(duration) : 'Unknown (data missing)'
+        hasStartTime ? deps.formatMs(duration) : 'Unknown (data missing)'
       }</p>`,
       true
     );
@@ -251,8 +265,12 @@ async function run() {
     }
     summary.write();
   } catch (err) {
-    core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);
+    deps.core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);
   }
 }
 
-run();
+if (require.main === module) {
+  run();
+}
+
+module.exports = { run, maybeWrite };
