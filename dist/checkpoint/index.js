@@ -27768,6 +27768,51 @@ module.exports = parseParams
 
 /***/ }),
 
+/***/ 3568:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const core = __nccwpck_require__(7484);
+const { fetchRateLimit } = __nccwpck_require__(5042);
+const { log } = __nccwpck_require__(9630);
+
+async function run(overrides = {}) {
+  const deps = {
+    core,
+    fetchRateLimit,
+    log,
+    ...overrides
+  };
+  try {
+    const token = deps.core.getInput('token');
+    if (!token) {
+      deps.log('[github-api-usage-tracker] Skipping checkpoint snapshot due to missing token');
+      return;
+    }
+
+    deps.log('[github-api-usage-tracker] Fetching checkpoint rate limits...');
+    const limits = await deps.fetchRateLimit();
+    const resources = limits.resources || {};
+
+    deps.log('[github-api-usage-tracker] Checkpoint Snapshot:');
+    deps.log('[github-api-usage-tracker] ---------------------');
+    deps.log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
+
+    deps.core.saveState('checkpoint_time', String(Date.now()));
+    deps.core.saveState('checkpoint_rate_limits', JSON.stringify(resources));
+  } catch (err) {
+    deps.core.warning(`[github-api-usage-tracker] Main step snapshot failed: ${err.message}`);
+  }
+}
+
+if (require.main === require.cache[eval('__filename')]) {
+  run();
+}
+
+module.exports = { run };
+
+
+/***/ }),
+
 /***/ 9630:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -27920,36 +27965,12 @@ module.exports = { fetchRateLimit };
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-var __webpack_exports__ = {};
-const core = __nccwpck_require__(7484);
-const { fetchRateLimit } = __nccwpck_require__(5042);
-const { log } = __nccwpck_require__(9630);
-
-async function run() {
-  try {
-    const token = core.getInput('token');
-    if (!token) {
-      log('[github-api-usage-tracker] Skipping checkpoint snapshot due to missing token');
-      return;
-    }
-
-    log('[github-api-usage-tracker] Fetching checkpoint rate limits...');
-    const limits = await fetchRateLimit();
-    const resources = limits.resources || {};
-
-    log('[github-api-usage-tracker] Checkpoint Snapshot:');
-    log('[github-api-usage-tracker] ---------------------');
-    log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
-
-    core.saveState('checkpoint_time', String(Date.now()));
-    core.saveState('checkpoint_rate_limits', JSON.stringify(resources));
-  } catch (err) {
-    core.warning(`[github-api-usage-tracker] Main step snapshot failed: ${err.message}`);
-  }
-}
-
-run();
-
-module.exports = __webpack_exports__;
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module is referenced by other modules so it can't be inlined
+/******/ 	var __webpack_exports__ = __nccwpck_require__(3568);
+/******/ 	module.exports = __webpack_exports__;
+/******/ 	
 /******/ })()
 ;
