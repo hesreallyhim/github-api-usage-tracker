@@ -42,8 +42,8 @@
       </feMerge>
     </filter>
 
-    <!-- Flow paths -->
-    <path id="leftFlowPath" d="M 30 65 L 200 65"/>
+    <!-- Flow paths - left starts from right edge of START ring (60+28=88) -->
+    <path id="leftFlowPath" d="M 88 65 L 200 65"/>
     <path id="rightFlowPath" d="M 600 65 L 770 65"/>
   </defs>
 
@@ -58,12 +58,12 @@
 
   <!-- === LEFT SIDE: Start indicator === -->
 
-  <!-- Flow line - solid and visible -->
-  <line x1="100" y1="65" x2="200" y2="65" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
+  <!-- Flow line - solid and visible, starts at ring edge -->
+  <line x1="88" y1="65" x2="200" y2="65" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
 
-  <!-- Animated dashes on flow line -->
-  <line x1="100" y1="65" x2="200" y2="65" stroke="#22d3ee" stroke-width="3" stroke-dasharray="8,12" stroke-linecap="round">
-    <animate attributeName="stroke-dashoffset" from="0" to="-40" dur="2s" repeatCount="indefinite"/>
+  <!-- Animated dashes on flow line - 2s cycle -->
+  <line x1="88" y1="65" x2="200" y2="65" stroke="#22d3ee" stroke-width="3" stroke-dasharray="8,12" stroke-linecap="round">
+    <animate attributeName="stroke-dashoffset" from="0" to="-80" dur="2s" repeatCount="indefinite"/>
   </line>
 
   <!-- Arrow pointing right -->
@@ -71,8 +71,25 @@
 
   <!-- Start icon - solid filled circle with play symbol -->
   <g transform="translate(60, 65)">
-    <!-- Outer ring -->
-    <circle r="28" fill="none" stroke="#06b6d4" stroke-width="3"/>
+    <!-- Outer ring (base) -->
+    <circle r="28" fill="none" stroke="#0e7490" stroke-width="3"/>
+
+    <!-- Traveling pulse - top half (left to right over top) -->
+    <!-- dasharray="15 180" = 15px segment with huge gap so pattern doesn't repeat on 88px arc -->
+    <path d="M -28,0 A 28,28 0 0,0 28,0" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="15 180" stroke-dashoffset="20" filter="url(#glow)">
+      <!-- offset 20: hidden before start. offset -95: hidden past end -->
+      <animate attributeName="stroke-dashoffset" values="20;-95;20;20" keyTimes="0;0.4;0.42;1" dur="2s" repeatCount="indefinite"/>
+      <!-- Hide during reset so it doesn't visibly sweep backwards -->
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.39;0.4;0.99;1" dur="2s" repeatCount="indefinite"/>
+    </path>
+
+    <!-- Traveling pulse - bottom half (left to right under bottom) -->
+    <path d="M -28,0 A 28,28 0 0,1 28,0" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="15 180" stroke-dashoffset="20" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" values="20;-95;20;20" keyTimes="0;0.4;0.42;1" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.39;0.4;0.99;1" dur="2s" repeatCount="indefinite"/>
+    </path>
 
     <!-- Filled background -->
     <circle r="22" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
@@ -131,11 +148,14 @@
   <!-- Label -->
   <text x="740" y="110" text-anchor="middle" fill="#f97316" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" letter-spacing="1">END</text>
 
-  <!-- Flowing particles -->
-  <circle r="5" fill="#22d3ee" filter="url(#glow)">
-    <animateMotion dur="2s" repeatCount="indefinite">
+  <!-- Flowing particle - synced to 2s cycle, moves only after charge completes -->
+  <circle r="5" fill="#67e8f9" filter="url(#glow)">
+    <!-- 2s total cycle: wait at start 0-40%, travel 40-100% -->
+    <animateMotion dur="2s" repeatCount="indefinite" keyPoints="0;0;1" keyTimes="0;0.4;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.1 0.25 1">
       <mpath href="#leftFlowPath"/>
     </animateMotion>
+    <!-- Invisible during charge (0-40%), visible during travel (40-100%) -->
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.38;0.42;0.9;1" dur="2s" repeatCount="indefinite"/>
   </circle>
 
   <circle r="5" fill="#fb923c" filter="url(#glow)">
