@@ -10,7 +10,7 @@
 
 </div>
 
-Track how many GitHub API requests a workflow job consumes, parttioned by bucket (core, GraphQL, search, etc.).
+Track how many GitHub API requests a workflow job consumes, partitioned by bucket (core, GraphQL, search, etc.).
 
 This action captures the rate-limit state at job start and compares it with the state at job end.
 
@@ -23,9 +23,9 @@ jobs:
   search:
     runs-on: ubuntu-latest
     steps:
-      - name Checkout
+      - name: Checkout
         uses: actions/checkout@v4
-      - name Track Usage
+      - name: Track Usage
         uses: hesreallyhim/github-api-usage-tracker@v1
       - name: Query API
         uses: actions/github-script@v6
@@ -45,13 +45,19 @@ After your job completes, you'll get a nice summary in the workflow UI:
 
 | Name        | Description                                                                                                            | Default                       |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| token       | Name of GitHub token used to query rate limits                                                                         | github.token (`GITHUB_TOKEN`) |
+| token       | GitHub token used to query rate limits                                                                                 | github.token (`GITHUB_TOKEN`) |
 | buckets     | Comma-separated list of rate-limit buckets to track.<br>(core, search, graphql...) - see reference below for full list | core,search,graphql           |
 | output_path | Write usage report JSON to this path (empty to disable)                                                                | github_api_usage.json         |
 
 ## Outputs
 
-| Name                                    | Description                                                         |
+| Name    | Description                                                     |
+| ------- | --------------------------------------------------------------- |
+| `usage` | JSON string with the fields described below (stringified JSON). |
+
+The `usage` output is a JSON string with the following structure (stringified):
+
+| Path                                    | Description                                                         |
 | --------------------------------------- | ------------------------------------------------------------------- |
 | `total`                                 | Summation of captured queries/points used per bucket                |
 | `duration_ms`                           | Duration between first and last snapshot in milliseconds            |
@@ -109,7 +115,7 @@ Example output:
 
 ### Token Types
 
-- GitHub’s primary rate limit for Actions using the `GITHUB_TOKEN` is 1,000 REST API requests per repository per hour (or 15,000 per repository per hour for GitHub Enterprise Cloud).
+- GitHub’s primary rate limit for Actions using the `GITHUB_TOKEN` is 1,000 REST API requests per repository per hour (or 15,000 per repository per hour for GitHub Enterprise Cloud); these limits are policy-level and can change independently of the API version.
 - If you set the `token` to be a PAT, or something besides `GITHUB_TOKEN`, that token has the same rate-limit in the Action as it does elsewhere (and rate-limit "snapshots" will be impacted).
 - Despite appearances, `GITHUB_TOKEN` is an ephemeral token that is minted at the start of each job, as an app installation token from the GitHub Actions app. However, the same _rate limit_ applies to any job within the repo, even though the tokens are, strictly speaking, non-identical.
 - For this reason, the API usage measurements can only be considered precise if there is _no other job_ running concurrently with the action that you wish to track. This is also why the rate limit starting snapshot may already show non-0 usage data.
