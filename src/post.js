@@ -4,11 +4,10 @@ const path = require('path');
 const { fetchRateLimit } = require('./rate-limit');
 const { log, parseBuckets } = require('./log');
 const {
-  formatMs,
-  makeSummaryTable,
   computeBucketUsage,
   getUsageWarningMessage,
-  buildBucketData
+  buildBucketData,
+  buildSummaryContent
 } = require('./post-utils');
 
 /**
@@ -68,7 +67,6 @@ async function run() {
     const data = {};
     const crossedBuckets = [];
     let totalUsed = 0;
-    let totalIsMinimum = false;
 
     for (const bucket of buckets) {
       const startingBucket = startingResources[bucket];
@@ -106,7 +104,6 @@ async function run() {
       data[bucket] = buildBucketData(startingBucket, endingBucket, usage);
       if (usage.crossed_reset) {
         crossedBuckets.push(bucket);
-        totalIsMinimum = true;
       }
       totalUsed += usage.used;
     }
@@ -116,7 +113,7 @@ async function run() {
       total: totalUsed,
       duration_ms: duration,
       buckets_data: data,
-      crossed_reset: totalIsMinimum
+      crossed_reset: crossedBuckets.length > 0
     };
     core.setOutput('usage', JSON.stringify(output, null, 2));
 
@@ -128,28 +125,13 @@ async function run() {
     log(
       `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
     );
+    const summaryContent = buildSummaryContent(data, crossedBuckets, totalUsed, duration);
     const summary = core.summary
       .addHeading('GitHub API Usage Tracker Summary')
-      .addTable(makeSummaryTable(data, { useMinimumHeader: totalIsMinimum }));
-
-    if (crossedBuckets.length > 0) {
-      summary.addRaw(
-        `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
-        true
-      );
-      summary.addRaw(
-        '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>',
-        true
-      );
-      summary.addRaw(`<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
-    } else {
-      summary.addRaw(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
+      .addTable(summaryContent.table);
+    for (const section of summaryContent.sections) {
+      summary.addRaw(section, true);
     }
-
-    summary.addRaw(
-      `<p><strong>Action Duration:</strong> ${hasStartTime ? formatMs(duration) : 'Unknown'}</p>`,
-      true
-    );
     summary.write();
   } catch (err) {
     core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);

@@ -7,7 +7,8 @@ const {
   makeSummaryTable,
   computeBucketUsage,
   getUsageWarningMessage,
-  buildBucketData
+  buildBucketData,
+  buildSummaryContent
 } = require('../src/post-utils.js');
 
 describe('post utils', () => {
@@ -364,5 +365,50 @@ describe('buildBucketData', () => {
       remaining: { start: 900, end: null },
       crossed_reset: true
     });
+  });
+});
+
+describe('buildSummaryContent', () => {
+  it('builds summary without reset crossing', () => {
+    const data = {
+      core: {
+        used: { start: 100, end: 150, total: 50 },
+        remaining: { start: 900, end: 850 }
+      }
+    };
+    const result = buildSummaryContent(data, [], 50, 60000);
+
+    expect(result.table).toEqual(makeSummaryTable(data, { useMinimumHeader: false }));
+    expect(result.sections).toHaveLength(2);
+    expect(result.sections[0]).toBe('<p><strong>Total API Calls/Points Used:</strong> 50</p>');
+    expect(result.sections[1]).toBe('<p><strong>Action Duration:</strong> 1m 0s</p>');
+  });
+
+  it('builds summary with reset crossing', () => {
+    const data = {
+      core: { used: { start: 100, end: 50, total: 150 }, remaining: { start: 900, end: 950 } }
+    };
+    const result = buildSummaryContent(data, ['core'], 150, 120000);
+
+    expect(result.table).toEqual(makeSummaryTable(data, { useMinimumHeader: true }));
+    expect(result.sections).toHaveLength(4);
+    expect(result.sections[0]).toBe('<p><strong>Reset Window Crossed:</strong> Yes (core)</p>');
+    expect(result.sections[1]).toBe(
+      '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>'
+    );
+    expect(result.sections[2]).toBe('<p><strong>Minimum API Calls/Points Used:</strong> 150</p>');
+    expect(result.sections[3]).toBe('<p><strong>Action Duration:</strong> 2m 0s</p>');
+  });
+
+  it('shows unknown duration when null', () => {
+    const result = buildSummaryContent({}, [], 0, null);
+    expect(result.sections[1]).toBe('<p><strong>Action Duration:</strong> Unknown</p>');
+  });
+
+  it('lists multiple crossed buckets', () => {
+    const result = buildSummaryContent({}, ['core', 'search'], 100, 1000);
+    expect(result.sections[0]).toBe(
+      '<p><strong>Reset Window Crossed:</strong> Yes (core, search)</p>'
+    );
   });
 });

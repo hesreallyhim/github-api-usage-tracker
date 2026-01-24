@@ -203,10 +203,45 @@ function buildBucketData(startingBucket, endingBucket, usage) {
   };
 }
 
+/**
+ * Builds the summary content object for the job summary.
+ *
+ * @param {object} data - bucket data keyed by bucket name.
+ * @param {string[]} crossedBuckets - list of buckets that crossed reset.
+ * @param {number} totalUsed - total API calls/points used.
+ * @param {number|null} duration - action duration in milliseconds.
+ * @returns {object} - summary content with table and HTML sections.
+ */
+function buildSummaryContent(data, crossedBuckets, totalUsed, duration) {
+  const totalIsMinimum = crossedBuckets.length > 0;
+  const table = makeSummaryTable(data, { useMinimumHeader: totalIsMinimum });
+
+  const sections = [];
+
+  if (totalIsMinimum) {
+    sections.push(
+      `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`
+    );
+    sections.push(
+      '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>'
+    );
+    sections.push(`<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`);
+  } else {
+    sections.push(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`);
+  }
+
+  sections.push(
+    `<p><strong>Action Duration:</strong> ${duration !== null ? formatMs(duration) : 'Unknown'}</p>`
+  );
+
+  return { table, sections };
+}
+
 module.exports = {
   formatMs,
   makeSummaryTable,
   computeBucketUsage,
   getUsageWarningMessage,
-  buildBucketData
+  buildBucketData,
+  buildSummaryContent
 };
