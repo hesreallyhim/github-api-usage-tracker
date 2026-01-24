@@ -1,23 +1,3 @@
-/**
- * Retrieves a numeric state value from the GitHub Actions state.
- *
- * @param {string} key - The state key to retrieve.
- * @returns {number|undefined} - The numeric value if valid and finite, otherwise undefined.
- */
-
-/**
- * Writes a summary table of API resource usage to the GitHub Actions summary.
- *
- * @param {Object.<string, {used: number, remaining: number}>} resources - Object mapping bucket names to usage info.
- */
-
-/**
- * Main post-action function that calculates and reports GitHub API usage.
- * Fetches final rate limits, compares with starting values, and outputs usage data.
- *
- * @async
- * @returns {Promise<void>}
- */
 const core = require('@actions/core');
 const fs = require('fs');
 const path = require('path');
@@ -27,14 +7,12 @@ const {
   formatMs,
   makeSummaryTable,
   computeBucketUsage,
-  getUsageWarningMessage
+  getUsageWarningMessage,
+  buildBucketData
 } = require('./post-utils');
 
 /**
  * Writes JSON-stringified data to a file if a valid pathname is provided.
- *
- * @param {string} pathname - file path to write to.
- * @param {object} data - data to write.
  */
 function maybeWrite(pathname, data) {
   if (!pathname) return;
@@ -44,73 +22,49 @@ function maybeWrite(pathname, data) {
 }
 
 async function run() {
-  if (core.getState('skip_post') === 'true') {
-    log('[github-api-usage-tracker] Skipping post step due to missing token');
+  if (core.getState('skip_rest') === 'true') {
+    log('[github-api-usage-tracker] Skipping post step');
     return;
   }
   try {
     const buckets = parseBuckets(core.getInput('buckets'));
-
     if (buckets.length === 0) {
       log('[github-api-usage-tracker] No valid buckets specified for tracking');
       return;
     }
 
+    // Get starting state (saved by pre.js)
     const startingState = core.getState('starting_rate_limits');
     if (!startingState) {
-      core.error(
-        '[github-api-usage-tracker] No starting rate limit data found; skipping post step'
-      );
+      core.error('[github-api-usage-tracker] No starting rate limit data found; skipping');
       return;
     }
-    let startingResources;
-    try {
-      startingResources = JSON.parse(startingState);
-    } catch {
-      core.error(
-        '[github-api-usage-tracker] Failed to parse starting rate limit data; skipping post step'
-      );
-      return;
-    }
+    const startingResources = JSON.parse(startingState);
     const startTime = Number(core.getState('start_time'));
     const hasStartTime = Number.isFinite(startTime);
-    if (!hasStartTime) {
-      core.error(
-        '[github-api-usage-tracker] Invalid or missing start time; duration will be reported as unknown'
-      );
-    }
+
+    // Get checkpoint state if available (saved by checkpoint.js)
     const checkpointState = core.getState('checkpoint_rate_limits');
-    let checkpointResources;
-    let checkpointTimeSeconds = null;
-    if (checkpointState) {
-      try {
-        checkpointResources = JSON.parse(checkpointState);
-      } catch {
-        core.warning(
-          '[github-api-usage-tracker] Failed to parse checkpoint rate limit data; ignoring checkpoint snapshot'
-        );
-      }
-    }
-    if (checkpointResources) {
-      const checkpointTimeMs = Number(core.getState('checkpoint_time'));
-      checkpointTimeSeconds =
-        Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
-          ? Math.floor(checkpointTimeMs / 1000)
-          : null;
-    }
+    const checkpointResources = checkpointState ? JSON.parse(checkpointState) : null;
+    const checkpointTimeMs = checkpointResources ? Number(core.getState('checkpoint_time')) : null;
+    const checkpointTimeSeconds =
+      Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
+        ? Math.floor(checkpointTimeMs / 1000)
+        : null;
+
+    // Fetch final rate limits
+    log('[github-api-usage-tracker] Fetching final rate limits...');
+    const endingLimits = await fetchRateLimit();
+    const endingResources = endingLimits.resources || {};
     const endTime = Date.now();
     const endTimeSeconds = Math.floor(endTime / 1000);
     const duration = hasStartTime ? endTime - startTime : null;
-
-    log('[github-api-usage-tracker] Fetching final rate limits...');
-
-    const endingLimits = await fetchRateLimit();
-    const endingResources = endingLimits.resources || {};
 
     log('[github-api-usage-tracker] Final Snapshot:');
     log('[github-api-usage-tracker] -----------------');
     log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
 
+    // Process each bucket
     const data = {};
     const crossedBuckets = [];
     let totalUsed = 0;
@@ -119,16 +73,13 @@ async function run() {
     for (const bucket of buckets) {
       const startingBucket = startingResources[bucket];
       const endingBucket = endingResources[bucket];
+
       if (!startingBucket) {
-        core.warning(
-          `[github-api-usage-tracker] Starting rate limit bucket "${bucket}" not found; skipping`
-        );
+        core.warning(`[github-api-usage-tracker] Starting bucket "${bucket}" not found; skipping`);
         continue;
       }
       if (!endingBucket) {
-        core.warning(
-          `[github-api-usage-tracker] Ending rate limit bucket "${bucket}" not found; skipping`
-        );
+        core.warning(`[github-api-usage-tracker] Ending bucket "${bucket}" not found; skipping`);
         continue;
       }
 
@@ -140,6 +91,7 @@ async function run() {
         checkpointBucket,
         checkpointTimeSeconds
       );
+
       if (!usage.valid) {
         core.warning(getUsageWarningMessage(usage.reason, bucket));
         continue;
@@ -151,34 +103,9 @@ async function run() {
         );
       }
 
-      const startingRemaining = Number(startingBucket.remaining);
-      const startingLimit = Number(startingBucket.limit);
-      const endingRemaining = Number(endingBucket.remaining);
-      const endingLimit = Number(endingBucket.limit);
-      const startUsed =
-        Number.isFinite(startingLimit) && Number.isFinite(startingRemaining)
-          ? startingLimit - startingRemaining
-          : null;
-      const endUsed =
-        Number.isFinite(endingLimit) && Number.isFinite(endingRemaining)
-          ? endingLimit - endingRemaining
-          : null;
-      data[bucket] = {
-        used: {
-          start: startUsed,
-          end: endUsed,
-          total: usage.used
-        },
-        remaining: {
-          start: Number.isFinite(startingRemaining) ? startingRemaining : null,
-          end: Number.isFinite(endingRemaining) ? endingRemaining : null
-        },
-        crossed_reset: usage.crossed_reset
-      };
+      data[bucket] = buildBucketData(startingBucket, endingBucket, usage);
       if (usage.crossed_reset) {
         crossedBuckets.push(bucket);
-      }
-      if (usage.crossed_reset) {
         totalIsMinimum = true;
       }
       totalUsed += usage.used;
@@ -197,32 +124,32 @@ async function run() {
     const outPath = (core.getInput('output_path') || '').trim();
     maybeWrite(outPath, output);
 
+    // Build summary
     log(
       `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
     );
     const summary = core.summary
       .addHeading('GitHub API Usage Tracker Summary')
       .addTable(makeSummaryTable(data, { useMinimumHeader: totalIsMinimum }));
+
     if (crossedBuckets.length > 0) {
       summary.addRaw(
         `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
         true
       );
       summary.addRaw(
-        '<p><strong>Total Usage:</strong> Total usage cannot be computed - usage reset window was crossed.</p>',
+        '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>',
         true
       );
       summary.addRaw(`<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
-    }
-    summary.addRaw(
-      `<p><strong>Action Duration:</strong> ${
-        hasStartTime ? formatMs(duration) : 'Unknown (data missing)'
-      }</p>`,
-      true
-    );
-    if (crossedBuckets.length === 0) {
+    } else {
       summary.addRaw(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
     }
+
+    summary.addRaw(
+      `<p><strong>Action Duration:</strong> ${hasStartTime ? formatMs(duration) : 'Unknown'}</p>`,
+      true
+    );
     summary.write();
   } catch (err) {
     core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);

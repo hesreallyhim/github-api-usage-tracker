@@ -3,13 +3,11 @@ const { fetchRateLimit } = require('./rate-limit');
 const { log } = require('./log');
 
 async function run() {
+  if (core.getState('skip_rest') === 'true') {
+    log('[github-api-usage-tracker] Skipping checkpoint step');
+    return;
+  }
   try {
-    const token = core.getInput('token');
-    if (!token) {
-      log('[github-api-usage-tracker] Skipping checkpoint snapshot due to missing token');
-      return;
-    }
-
     log('[github-api-usage-tracker] Fetching checkpoint rate limits...');
     const limits = await fetchRateLimit();
     const resources = limits.resources || {};

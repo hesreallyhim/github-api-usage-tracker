@@ -166,4 +166,47 @@ function getUsageWarningMessage(reason, bucket) {
   }
 }
 
-module.exports = { formatMs, makeSummaryTable, computeBucketUsage, getUsageWarningMessage };
+/**
+ * Builds the data object for a single bucket from snapshots and computed usage.
+ *
+ * @param {object} startingBucket - bucket from the pre snapshot.
+ * @param {object} endingBucket - bucket from the post snapshot.
+ * @param {object} usage - computed usage from computeBucketUsage.
+ * @returns {object} - bucket data with used/remaining info.
+ */
+function buildBucketData(startingBucket, endingBucket, usage) {
+  const startingRemaining = Number(startingBucket.remaining);
+  const startingLimit = Number(startingBucket.limit);
+  const endingRemaining = Number(endingBucket.remaining);
+  const endingLimit = Number(endingBucket.limit);
+
+  const startUsed =
+    Number.isFinite(startingLimit) && Number.isFinite(startingRemaining)
+      ? startingLimit - startingRemaining
+      : null;
+  const endUsed =
+    Number.isFinite(endingLimit) && Number.isFinite(endingRemaining)
+      ? endingLimit - endingRemaining
+      : null;
+
+  return {
+    used: {
+      start: startUsed,
+      end: endUsed,
+      total: usage.used
+    },
+    remaining: {
+      start: Number.isFinite(startingRemaining) ? startingRemaining : null,
+      end: Number.isFinite(endingRemaining) ? endingRemaining : null
+    },
+    crossed_reset: usage.crossed_reset
+  };
+}
+
+module.exports = {
+  formatMs,
+  makeSummaryTable,
+  computeBucketUsage,
+  getUsageWarningMessage,
+  buildBucketData
+};

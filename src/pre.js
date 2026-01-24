@@ -8,7 +8,7 @@ async function run() {
 
     if (!token) {
       core.error('GitHub token is required for API Usage Tracker');
-      core.saveState('skip_post', 'true');
+      core.saveState('skip_rest', 'true');
       return;
     }
 

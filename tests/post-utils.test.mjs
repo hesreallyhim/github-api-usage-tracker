@@ -6,7 +6,8 @@ const {
   formatMs,
   makeSummaryTable,
   computeBucketUsage,
-  getUsageWarningMessage
+  getUsageWarningMessage,
+  buildBucketData
 } = require('../src/post-utils.js');
 
 describe('post utils', () => {
@@ -337,5 +338,31 @@ describe('getUsageWarningMessage', () => {
     expect(getUsageWarningMessage('unknown_reason', bucket)).toBe(
       `${prefix} Invalid usage data for bucket "core"; skipping`
     );
+  });
+});
+
+describe('buildBucketData', () => {
+  it('builds data object with valid numeric values', () => {
+    const startingBucket = { limit: 1000, remaining: 900 };
+    const endingBucket = { limit: 1000, remaining: 850 };
+    const usage = { used: 50, crossed_reset: false };
+
+    expect(buildBucketData(startingBucket, endingBucket, usage)).toEqual({
+      used: { start: 100, end: 150, total: 50 },
+      remaining: { start: 900, end: 850 },
+      crossed_reset: false
+    });
+  });
+
+  it('returns null for non-numeric values', () => {
+    const startingBucket = { limit: 'invalid', remaining: 900 };
+    const endingBucket = { limit: 1000, remaining: 'bad' };
+    const usage = { used: 50, crossed_reset: true };
+
+    expect(buildBucketData(startingBucket, endingBucket, usage)).toEqual({
+      used: { start: null, end: null, total: 50 },
+      remaining: { start: 900, end: null },
+      crossed_reset: true
+    });
   });
 });
