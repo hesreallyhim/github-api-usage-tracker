@@ -30,3 +30,22 @@ module.exports = { run };
 This structure mirrors common patterns in other languages (e.g., Python's `if __name__ == '__main__':` at the bottom) and provides a clear "stop reading here" signal for anyone reviewing the logic.
 
 **Note:** Pure utility modules like `post-utils.js` and `log.js` do not use this pattern since they have no external dependencies and can be tested directly.
+
+---
+
+## Update: Pattern Reverted (2026-01-23)
+
+The dependency injection pattern described above was reverted. Investigation revealed:
+
+1. **Root cause**: Vitest's `vi.mock()` does not intercept `require()` calls in CommonJS modules. The DI pattern was a workaround for this Vitest limitation.
+
+2. **Coverage before DI**: 36% (entry points at 0%)
+3. **Coverage after DI**: 99%
+
+However, the 0% coverage on entry points was partly because we hadn't attempted to test them via other means. The new approach:
+
+- **Extract pure logic** into utility modules (`post-utils.js`) where it can be tested directly
+- **Keep entry points thin** - just orchestration/wiring
+- **Integration test** entry points via `act` (local GitHub Actions runner) if needed
+
+This follows the "functional core, imperative shell" pattern and avoids shaping production code around testing infrastructure limitations.

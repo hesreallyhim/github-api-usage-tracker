@@ -23,7 +23,12 @@ const fs = require('fs');
 const path = require('path');
 const { fetchRateLimit } = require('./rate-limit');
 const { log, parseBuckets } = require('./log');
-const { formatMs, makeSummaryTable, computeBucketUsage } = require('./post-utils');
+const {
+  formatMs,
+  makeSummaryTable,
+  computeBucketUsage,
+  getUsageWarningMessage
+} = require('./post-utils');
 
 /**
  * Writes JSON-stringified data to a file if a valid pathname is provided.
@@ -136,38 +141,7 @@ async function run() {
         checkpointTimeSeconds
       );
       if (!usage.valid) {
-        switch (usage.reason) {
-          case 'invalid_remaining':
-            core.warning(
-              `[github-api-usage-tracker] Invalid remaining count for bucket "${bucket}"; skipping`
-            );
-            break;
-          case 'invalid_limit':
-            core.warning(
-              `[github-api-usage-tracker] Invalid limit for bucket "${bucket}" during reset crossing; skipping`
-            );
-            break;
-          case 'limit_changed_without_reset':
-            core.warning(
-              `[github-api-usage-tracker] Limit changed without reset for bucket "${bucket}"; skipping`
-            );
-            break;
-          case 'remaining_increased_without_reset':
-            core.warning(
-              `[github-api-usage-tracker] Remaining increased without reset for bucket "${bucket}"; skipping`
-            );
-            break;
-          case 'negative_usage':
-            core.warning(
-              `[github-api-usage-tracker] Negative usage for bucket "${bucket}" detected; skipping`
-            );
-            break;
-          default:
-            core.warning(
-              `[github-api-usage-tracker] Invalid usage data for bucket "${bucket}"; skipping`
-            );
-            break;
-        }
+        core.warning(getUsageWarningMessage(usage.reason, bucket));
         continue;
       }
 
