@@ -27774,6 +27774,11 @@ module.exports = parseParams
 const core = __nccwpck_require__(7484);
 
 /**
+ * Prefix for all log messages.
+ */
+const PREFIX = '[github-api-usage-tracker]';
+
+/**
  * List of valid GitHub API rate limit buckets.
  */
 const VALID_BUCKETS = [
@@ -27790,12 +27795,30 @@ const VALID_BUCKETS = [
 ];
 
 /**
- * Logs a message using GitHub Actions debug logging.
+ * Logs a debug message with prefix.
  *
  * @param {string} message - message to log.
  */
 function log(message) {
-  core.debug(message);
+  core.debug(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs a warning message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function warn(message) {
+  core.warning(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs an error message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function error(message) {
+  core.error(`${PREFIX} ${message}`);
 }
 
 /**
@@ -27821,14 +27844,14 @@ function parseBuckets(raw) {
     }
   }
   if (invalidBuckets.length > 0) {
-    core.warning(
+    warn(
       `Invalid bucket(s) selected: ${invalidBuckets.join(', ')}, valid options are: ${VALID_BUCKETS.join(', ')}`
     );
   }
   return buckets;
 }
 
-module.exports = { log, parseBuckets, VALID_BUCKETS };
+module.exports = { PREFIX, log, warn, error, parseBuckets, VALID_BUCKETS };
 
 
 /***/ }),
@@ -27923,33 +27946,33 @@ module.exports = { fetchRateLimit };
 var __webpack_exports__ = {};
 const core = __nccwpck_require__(7484);
 const { fetchRateLimit } = __nccwpck_require__(5042);
-const { log } = __nccwpck_require__(9630);
+const { log, warn, error } = __nccwpck_require__(9630);
 
 async function run() {
   try {
     const token = core.getInput('token');
 
     if (!token) {
-      core.error('GitHub token is required for API Usage Tracker');
-      core.saveState('skip_post', 'true');
+      error('GitHub token is required for API Usage Tracker');
+      core.saveState('skip_rest', 'true');
       return;
     }
 
     const startTime = Date.now();
     core.saveState('start_time', String(startTime));
 
-    log('[github-api-usage-tracker] Fetching initial rate limits...');
+    log('Fetching initial rate limits...');
 
     const limits = await fetchRateLimit();
     const resources = limits.resources || {};
 
-    log('[github-api-usage-tracker] Initial Snapshot:');
-    log('[github-api-usage-tracker] -----------------');
-    log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
+    log('Initial Snapshot:');
+    log('-----------------');
+    log(JSON.stringify(resources, null, 2));
 
     core.saveState('starting_rate_limits', JSON.stringify(resources));
   } catch (err) {
-    core.warning(`Pre step failed: ${err.message}`);
+    warn(`Pre step failed: ${err.message}`);
   }
 }
 
