@@ -52,6 +52,8 @@ describe('fetchRateLimit', () => {
     process.env.INPUT_TOKEN = 'token123';
     requestSpy = vi.spyOn(https, 'request').mockImplementation((options, callback) => {
       const req = new EventEmitter();
+      req.setTimeout = () => {};
+      req.destroy = () => {};
       req.end = () => {
         const res = new EventEmitter();
         res.statusCode = 200;
@@ -80,6 +82,8 @@ describe('fetchRateLimit', () => {
     process.env.INPUT_TOKEN = 'token123';
     requestSpy = vi.spyOn(https, 'request').mockImplementation((options, callback) => {
       const req = new EventEmitter();
+      req.setTimeout = () => {};
+      req.destroy = () => {};
       req.end = () => {
         const res = new EventEmitter();
         res.statusCode = 401;
@@ -97,6 +101,8 @@ describe('fetchRateLimit', () => {
     process.env.INPUT_TOKEN = 'token123';
     requestSpy = vi.spyOn(https, 'request').mockImplementation((options, callback) => {
       const req = new EventEmitter();
+      req.setTimeout = () => {};
+      req.destroy = () => {};
       req.end = () => {
         const res = new EventEmitter();
         res.statusCode = 200;

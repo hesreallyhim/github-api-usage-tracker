@@ -81,7 +81,7 @@ async function run() {
     for (const section of summaryContent.sections) {
       summary.addRaw(section, true);
     }
-    summary.write();
+    await summary.write();
   } catch (err) {
     error(`Post step failed: ${err.message}`);
   }

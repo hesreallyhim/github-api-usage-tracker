@@ -27863,10 +27863,22 @@ const core = __nccwpck_require__(7484);
 const https = __nccwpck_require__(5692);
 const { log } = __nccwpck_require__(9630);
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 function fetchRateLimit() {
   const token = core.getInput('token');
   return new Promise((resolve, reject) => {
     if (!token) return reject(new Error('No GitHub token provided'));
+    let settled = false;
+    const finalize = (err, data) => {
+      if (settled) return;
+      settled = true;
+      if (err) {
+        reject(err);
+      } else {
+        resolve(data);
+      }
+    };
 
     const req = https.request(
       {
@@ -27884,18 +27896,24 @@ function fetchRateLimit() {
         res.on('end', () => {
           log(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
+            return finalize(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
           }
           try {
-            resolve(JSON.parse(data));
+            finalize(null, JSON.parse(data));
           } catch (e) {
-            reject(e);
+            finalize(e);
           }
         });
       }
     );
 
-    req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS);
+    req.on('timeout', () => {
+      const err = new Error(`GitHub API request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      req.destroy(err);
+      finalize(err);
+    });
+    req.on('error', finalize);
     req.end();
   });
 }
