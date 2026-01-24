@@ -1,24 +1,12 @@
 const core = require('@actions/core');
-const fs = require('fs');
-const path = require('path');
 const { fetchRateLimit } = require('./rate-limit');
 const { log, warn, error, parseBuckets } = require('./log');
 const {
-  computeBucketUsage,
-  getUsageWarningMessage,
-  buildBucketData,
-  buildSummaryContent
+  maybeWriteJson,
+  buildSummaryContent,
+  parseCheckpointTime,
+  processBuckets
 } = require('./post-utils');
-
-/**
- * Writes JSON-stringified data to a file if a valid pathname is provided.
- */
-function maybeWrite(pathname, data) {
-  if (!pathname) return;
-  const dir = path.dirname(pathname);
-  if (dir && dir !== '.') fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(pathname, JSON.stringify(data, null, 2));
-}
 
 async function run() {
   if (core.getState('skip_rest') === 'true') {
@@ -46,10 +34,7 @@ async function run() {
     const checkpointState = core.getState('checkpoint_rate_limits');
     const checkpointResources = checkpointState ? JSON.parse(checkpointState) : null;
     const checkpointTimeMs = checkpointResources ? Number(core.getState('checkpoint_time')) : null;
-    const checkpointTimeSeconds =
-      Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
-        ? Math.floor(checkpointTimeMs / 1000)
-        : null;
+    const checkpointTimeSeconds = parseCheckpointTime(checkpointTimeMs);
 
     // Fetch final rate limits
     log('Fetching final rate limits...');
@@ -64,49 +49,15 @@ async function run() {
     log(JSON.stringify(endingResources, null, 2));
 
     // Process each bucket
-    const data = {};
-    const crossedBuckets = [];
-    let totalUsed = 0;
-
-    for (const bucket of buckets) {
-      const startingBucket = startingResources[bucket];
-      const endingBucket = endingResources[bucket];
-
-      if (!startingBucket) {
-        warn(`Starting bucket "${bucket}" not found; skipping`);
-        continue;
-      }
-      if (!endingBucket) {
-        warn(`Ending bucket "${bucket}" not found; skipping`);
-        continue;
-      }
-
-      const checkpointBucket = checkpointResources ? checkpointResources[bucket] : undefined;
-      const usage = computeBucketUsage(
-        startingBucket,
-        endingBucket,
-        endTimeSeconds,
-        checkpointBucket,
-        checkpointTimeSeconds
-      );
-
-      if (!usage.valid) {
-        warn(getUsageWarningMessage(usage.reason, bucket));
-        continue;
-      }
-
-      if (usage.warnings.includes('limit_changed_across_reset')) {
-        warn(
-          `Limit changed across reset for bucket "${bucket}"; results may reflect a token change`
-        );
-      }
-
-      data[bucket] = buildBucketData(startingBucket, endingBucket, usage);
-      if (usage.crossed_reset) {
-        crossedBuckets.push(bucket);
-      }
-      totalUsed += usage.used;
-    }
+    const { data, crossedBuckets, totalUsed, warnings } = processBuckets({
+      buckets,
+      startingResources,
+      endingResources,
+      checkpointResources,
+      endTimeSeconds,
+      checkpointTimeSeconds
+    });
+    warnings.forEach((msg) => warn(msg));
 
     // Set output
     const output = {
@@ -119,7 +70,7 @@ async function run() {
 
     // Write JSON file if path specified
     const outPath = (core.getInput('output_path') || '').trim();
-    maybeWrite(outPath, output);
+    maybeWriteJson(outPath, output);
 
     // Build summary
     log(`Preparing summary table for ${Object.keys(data).length} bucket(s)`);

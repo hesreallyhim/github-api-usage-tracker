@@ -8,7 +8,9 @@ const {
   computeBucketUsage,
   getUsageWarningMessage,
   buildBucketData,
-  buildSummaryContent
+  buildSummaryContent,
+  parseCheckpointTime,
+  processBuckets
 } = require('../src/post-utils.js');
 
 describe('post utils', () => {
@@ -408,6 +410,103 @@ describe('buildSummaryContent', () => {
     const result = buildSummaryContent({}, ['core', 'search'], 100, 1000);
     expect(result.sections[0]).toBe(
       '<p><strong>Reset Window Crossed:</strong> Yes (core, search)</p>'
+    );
+  });
+});
+
+describe('parseCheckpointTime', () => {
+  it('converts valid milliseconds to seconds', () => {
+    expect(parseCheckpointTime(5000)).toBe(5);
+    expect(parseCheckpointTime(1500)).toBe(1);
+  });
+
+  it('returns null for zero or negative values', () => {
+    expect(parseCheckpointTime(0)).toBeNull();
+    expect(parseCheckpointTime(-1000)).toBeNull();
+  });
+
+  it('returns null for non-finite values', () => {
+    expect(parseCheckpointTime(null)).toBeNull();
+    expect(parseCheckpointTime(undefined)).toBeNull();
+    expect(parseCheckpointTime(NaN)).toBeNull();
+    expect(parseCheckpointTime(Infinity)).toBeNull();
+  });
+});
+
+describe('processBuckets', () => {
+  const makeResources = (remaining, limit = 1000, reset = 2000) => ({
+    core: { remaining, limit, reset }
+  });
+
+  it('processes valid buckets and returns usage data', () => {
+    const result = processBuckets({
+      buckets: ['core'],
+      startingResources: makeResources(900),
+      endingResources: makeResources(850),
+      checkpointResources: null,
+      endTimeSeconds: 1500,
+      checkpointTimeSeconds: null
+    });
+
+    expect(result.totalUsed).toBe(50);
+    expect(result.crossedBuckets).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.data.core.used.total).toBe(50);
+  });
+
+  it('collects warnings for missing starting bucket', () => {
+    const result = processBuckets({
+      buckets: ['core'],
+      startingResources: {},
+      endingResources: makeResources(850),
+      checkpointResources: null,
+      endTimeSeconds: 1500,
+      checkpointTimeSeconds: null
+    });
+
+    expect(result.warnings).toContain('Starting bucket "core" not found; skipping');
+    expect(result.data).toEqual({});
+  });
+
+  it('collects warnings for missing ending bucket', () => {
+    const result = processBuckets({
+      buckets: ['core'],
+      startingResources: makeResources(900),
+      endingResources: {},
+      checkpointResources: null,
+      endTimeSeconds: 1500,
+      checkpointTimeSeconds: null
+    });
+
+    expect(result.warnings).toContain('Ending bucket "core" not found; skipping');
+  });
+
+  it('tracks crossed reset buckets', () => {
+    const result = processBuckets({
+      buckets: ['core'],
+      startingResources: makeResources(700, 1000, 1000),
+      endingResources: makeResources(900),
+      checkpointResources: null,
+      endTimeSeconds: 1500,
+      checkpointTimeSeconds: null
+    });
+
+    expect(result.crossedBuckets).toEqual(['core']);
+    expect(result.totalUsed).toBe(100);
+  });
+
+  it('warns on limit change across reset', () => {
+    const result = processBuckets({
+      buckets: ['core'],
+      startingResources: { core: { remaining: 600, limit: 1000, reset: 1000 } },
+      endingResources: { core: { remaining: 4700, limit: 5000, reset: 2000 } },
+      checkpointResources: null,
+      endTimeSeconds: 1500,
+      checkpointTimeSeconds: null
+    });
+
+    expect(result.warnings).toContain(
+      'Limit changed across reset for bucket "core"; results may reflect a token change'
     );
   });
 });
