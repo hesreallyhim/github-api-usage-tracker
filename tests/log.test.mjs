@@ -18,10 +18,10 @@ describe('log helpers', () => {
     stdoutSpy.mockRestore();
   });
 
-  it('logs using core.debug', () => {
+  it('logs using core.debug with prefix', () => {
     log('hello');
     const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join('');
-    expect(output).toContain('::debug::hello');
+    expect(output).toContain('::debug::[github-api-usage-tracker] hello');
   });
 
   it('parses valid buckets and warns on invalid ones', () => {

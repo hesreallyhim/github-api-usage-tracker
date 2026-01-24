@@ -1,4 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 130">
+  <!--
+    ANIMATION IMPLEMENTATION NOTES
+    ==============================
+
+    This banner uses a synchronized 4-second animation cycle to create a continuous
+    "flow" effect from START to END, visualizing data moving through a pipeline.
+
+    KEY TECHNIQUES:
+
+    1. TRAVELING PULSE (ring charge effect)
+       - Each ring is split into two semicircle <path> arcs (top half, bottom half)
+       - stroke-dasharray="15 180" creates a 15px bright segment with a huge 180px gap
+       - The large gap prevents the dash pattern from repeating on the 88px arc
+       - stroke-dashoffset is animated to move the segment along the arc:
+         * offset=20: segment hidden before arc start
+         * offset=-95: segment hidden past arc end
+       - Opacity animation hides the segment during the instant "reset" jump,
+         preventing a visible backwards sweep
+
+    2. ORB MOTION (traveling particles)
+       - animateMotion with keyPoints/keyTimes controls WHEN the orb moves vs waits
+       - keyPoints="0;0;1;1" with keyTimes="0;0.2;0.4;1" means:
+         * 0-20% of cycle: orb waits at start (keyPoint 0)
+         * 20-40% of cycle: orb travels from start to end
+         * 40-100% of cycle: orb waits at end (keyPoint 1)
+       - Opacity animations make orbs visible only during their travel phase
+       - calcMode="spline" with easing curves creates smooth acceleration
+
+    3. SEQUENTIAL TIMING (unified 4s cycle)
+       - All animations share dur="4s" so they stay in sync
+       - Timeline phases (as percentage of cycle):
+         * 0-20%:   START ring pulse sweeps
+         * 20-40%:  Left orb travels (cyan)
+         * 40-60%:  Right orb travels (orange) - creates seamless continuation
+         * 60-80%:  END ring pulse sweeps
+         * 80-100%: Pause before restart
+
+    4. COLOR THEMING
+       - START side: Cyan palette (#06b6d4 base, #22d3ee mid, #67e8f9 bright)
+       - END side: Orange palette (#9a3412 base, #f97316 mid, #fdba74 bright)
+       - Gradient underline connects both themes visually
+  -->
   <defs>
     <!-- Solid dark background -->
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -43,8 +85,10 @@
     </filter>
 
     <!-- Flow paths -->
-    <path id="leftFlowPath" d="M 30 65 L 200 65"/>
-    <path id="rightFlowPath" d="M 600 65 L 770 65"/>
+    <!-- Left: starts from right edge of START ring (60+28=88) -->
+    <path id="leftFlowPath" d="M 88 65 L 200 65"/>
+    <!-- Right: ends at left edge of END ring (740-28=712) -->
+    <path id="rightFlowPath" d="M 600 65 L 712 65"/>
   </defs>
 
   <!-- Solid dark background -->
@@ -58,12 +102,12 @@
 
   <!-- === LEFT SIDE: Start indicator === -->
 
-  <!-- Flow line - solid and visible -->
-  <line x1="100" y1="65" x2="200" y2="65" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
+  <!-- Flow line - solid and visible, starts at ring edge -->
+  <line x1="88" y1="65" x2="200" y2="65" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
 
-  <!-- Animated dashes on flow line -->
-  <line x1="100" y1="65" x2="200" y2="65" stroke="#22d3ee" stroke-width="3" stroke-dasharray="8,12" stroke-linecap="round">
-    <animate attributeName="stroke-dashoffset" from="0" to="-40" dur="2s" repeatCount="indefinite"/>
+  <!-- Animated dashes on flow line - 4s cycle -->
+  <line x1="88" y1="65" x2="200" y2="65" stroke="#22d3ee" stroke-width="3" stroke-dasharray="8,12" stroke-linecap="round">
+    <animate attributeName="stroke-dashoffset" from="0" to="-80" dur="4s" repeatCount="indefinite"/>
   </line>
 
   <!-- Arrow pointing right -->
@@ -71,8 +115,23 @@
 
   <!-- Start icon - solid filled circle with play symbol -->
   <g transform="translate(60, 65)">
-    <!-- Outer ring -->
-    <circle r="28" fill="none" stroke="#06b6d4" stroke-width="3"/>
+    <!-- Outer ring (base) -->
+    <circle r="28" fill="none" stroke="#0e7490" stroke-width="3"/>
+
+    <!-- Traveling pulse - top half (left to right over top) -->
+    <!-- 4s cycle: pulse 0-0.2, orb travels 0.2-0.4, then idle while right side animates -->
+    <path d="M -28,0 A 28,28 0 0,0 28,0" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="15 180" stroke-dashoffset="20" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" values="20;-95;20;20" keyTimes="0;0.2;0.22;1" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.19;0.2;0.98;1" dur="4s" repeatCount="indefinite"/>
+    </path>
+
+    <!-- Traveling pulse - bottom half (left to right under bottom) -->
+    <path d="M -28,0 A 28,28 0 0,1 28,0" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="15 180" stroke-dashoffset="20" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" values="20;-95;20;20" keyTimes="0;0.2;0.22;1" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.19;0.2;0.98;1" dur="4s" repeatCount="indefinite"/>
+    </path>
 
     <!-- Filled background -->
     <circle r="22" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
@@ -105,12 +164,12 @@
 
   <!-- === RIGHT SIDE: End indicator === -->
 
-  <!-- Flow line - solid and visible -->
-  <line x1="600" y1="65" x2="700" y2="65" stroke="#f97316" stroke-width="3" stroke-linecap="round"/>
+  <!-- Flow line - solid and visible, ends at ring edge -->
+  <line x1="600" y1="65" x2="712" y2="65" stroke="#f97316" stroke-width="3" stroke-linecap="round"/>
 
-  <!-- Animated dashes on flow line -->
-  <line x1="600" y1="65" x2="700" y2="65" stroke="#fb923c" stroke-width="3" stroke-dasharray="8,12" stroke-linecap="round">
-    <animate attributeName="stroke-dashoffset" from="0" to="-40" dur="2s" repeatCount="indefinite"/>
+  <!-- Animated dashes on flow line - 4s cycle -->
+  <line x1="600" y1="65" x2="712" y2="65" stroke="#fb923c" stroke-width="3" stroke-dasharray="8,12" stroke-linecap="round">
+    <animate attributeName="stroke-dashoffset" from="0" to="-80" dur="4s" repeatCount="indefinite"/>
   </line>
 
   <!-- Arrow pointing right -->
@@ -118,8 +177,23 @@
 
   <!-- End icon - solid filled circle with checkmark -->
   <g transform="translate(740, 65)">
-    <!-- Outer ring -->
-    <circle r="28" fill="none" stroke="#f97316" stroke-width="3"/>
+    <!-- Outer ring (base) -->
+    <circle r="28" fill="none" stroke="#9a3412" stroke-width="3"/>
+
+    <!-- Traveling pulse - top half (left to right over top) -->
+    <!-- 4s cycle: idle 0-0.6, sweep 0.6-0.8, idle 0.8-1 -->
+    <path d="M -28,0 A 28,28 0 0,0 28,0" fill="none" stroke="#fdba74" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="15 180" stroke-dashoffset="20" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" values="20;20;-95;20;20" keyTimes="0;0.6;0.8;0.82;1" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.59;0.61;0.79;0.8;1" dur="4s" repeatCount="indefinite"/>
+    </path>
+
+    <!-- Traveling pulse - bottom half (left to right under bottom) -->
+    <path d="M -28,0 A 28,28 0 0,1 28,0" fill="none" stroke="#fdba74" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="15 180" stroke-dashoffset="20" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" values="20;20;-95;20;20" keyTimes="0;0.6;0.8;0.82;1" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.59;0.61;0.79;0.8;1" dur="4s" repeatCount="indefinite"/>
+    </path>
 
     <!-- Filled background -->
     <circle r="22" fill="#0f172a" stroke="#fb923c" stroke-width="2"/>
@@ -131,16 +205,23 @@
   <!-- Label -->
   <text x="740" y="110" text-anchor="middle" fill="#f97316" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" letter-spacing="1">END</text>
 
-  <!-- Flowing particles -->
-  <circle r="5" fill="#22d3ee" filter="url(#glow)">
-    <animateMotion dur="2s" repeatCount="indefinite">
+  <!-- Left orb - emits after START pulse, travels 0.2-0.4 of cycle -->
+  <circle r="5" fill="#67e8f9" filter="url(#glow)">
+    <!-- 4s cycle: wait 0-0.2, travel 0.2-0.4, wait 0.4-1 -->
+    <animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.2;0.4;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.1 0.25 1;0 0 1 1">
       <mpath href="#leftFlowPath"/>
     </animateMotion>
+    <!-- Visible only during travel (0.2-0.4) -->
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.18;0.22;0.38;0.42;1" dur="4s" repeatCount="indefinite"/>
   </circle>
 
-  <circle r="5" fill="#fb923c" filter="url(#glow)">
-    <animateMotion dur="2s" repeatCount="indefinite" begin="1s">
+  <!-- Right orb - continues the journey, travels 0.4-0.6 of cycle -->
+  <circle r="5" fill="#fdba74" filter="url(#glow)">
+    <!-- 4s cycle: wait 0-0.4, travel 0.4-0.6, wait 0.6-1 -->
+    <animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.4;0.6;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.1 0.25 1;0 0 1 1">
       <mpath href="#rightFlowPath"/>
     </animateMotion>
+    <!-- Visible only during travel (0.4-0.6), fade out as it arrives -->
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.38;0.42;0.58;0.62;1" dur="4s" repeatCount="indefinite"/>
   </circle>
 </svg>

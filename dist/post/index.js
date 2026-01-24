@@ -27774,6 +27774,11 @@ module.exports = parseParams
 const core = __nccwpck_require__(7484);
 
 /**
+ * Prefix for all log messages.
+ */
+const PREFIX = '[github-api-usage-tracker]';
+
+/**
  * List of valid GitHub API rate limit buckets.
  */
 const VALID_BUCKETS = [
@@ -27790,12 +27795,30 @@ const VALID_BUCKETS = [
 ];
 
 /**
- * Logs a message using GitHub Actions debug logging.
+ * Logs a debug message with prefix.
  *
  * @param {string} message - message to log.
  */
 function log(message) {
-  core.debug(message);
+  core.debug(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs a warning message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function warn(message) {
+  core.warning(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs an error message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function error(message) {
+  core.error(`${PREFIX} ${message}`);
 }
 
 /**
@@ -27821,20 +27844,33 @@ function parseBuckets(raw) {
     }
   }
   if (invalidBuckets.length > 0) {
-    core.warning(
+    warn(
       `Invalid bucket(s) selected: ${invalidBuckets.join(', ')}, valid options are: ${VALID_BUCKETS.join(', ')}`
     );
   }
   return buckets;
 }
 
-module.exports = { log, parseBuckets, VALID_BUCKETS };
+module.exports = { PREFIX, log, warn, error, parseBuckets, VALID_BUCKETS };
 
 
 /***/ }),
 
 /***/ 5828:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const fs = __nccwpck_require__(9896);
+const path = __nccwpck_require__(6928);
+
+/**
+ * Writes JSON-stringified data to a file if a valid pathname is provided.
+ */
+function maybeWriteJson(pathname, data) {
+  if (!pathname) return;
+  const dir = path.dirname(pathname);
+  if (dir && dir !== '.') fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(pathname, JSON.stringify(data, null, 2));
+}
 
 /**
  * Converts milliseconds to a human-readable duration string.
@@ -27884,6 +27920,66 @@ function makeSummaryTable(resources, options = {}) {
 }
 
 /**
+ * Computes usage when the reset window was crossed.
+ * Returns { used, warnings } on success, or { error } on failure.
+ */
+function computeUsageAcrossReset(ctx) {
+  const { startingLimit, endingLimit, endingRemaining, startingRemaining } = ctx;
+  const { checkpointBucket, checkpointTimeSeconds, resetPre } = ctx;
+
+  if (!Number.isFinite(startingLimit) || !Number.isFinite(endingLimit)) {
+    return { error: 'invalid_limit' };
+  }
+
+  const warnings = [];
+  if (startingLimit !== endingLimit) {
+    warnings.push('limit_changed_across_reset');
+  }
+
+  let used = endingLimit - endingRemaining;
+
+  // Add checkpoint usage if available and before reset
+  if (
+    checkpointBucket &&
+    Number.isFinite(checkpointTimeSeconds) &&
+    checkpointTimeSeconds < resetPre
+  ) {
+    const checkpointRemaining = Number(checkpointBucket.remaining);
+    if (Number.isFinite(checkpointRemaining)) {
+      const checkpointUsed = startingRemaining - checkpointRemaining;
+      if (checkpointUsed > 0) {
+        used += checkpointUsed;
+      }
+    }
+  }
+
+  return { used, warnings };
+}
+
+/**
+ * Computes usage within the same reset window.
+ * Returns { used, warnings } on success, or { error } on failure.
+ */
+function computeUsageWithinWindow(ctx) {
+  const { startingLimit, endingLimit, startingRemaining, endingRemaining } = ctx;
+
+  if (
+    Number.isFinite(startingLimit) &&
+    Number.isFinite(endingLimit) &&
+    startingLimit !== endingLimit
+  ) {
+    return { error: 'limit_changed_without_reset' };
+  }
+
+  const used = startingRemaining - endingRemaining;
+  if (used < 0) {
+    return { error: 'remaining_increased_without_reset' };
+  }
+
+  return { used, warnings: [] };
+}
+
+/**
  * Computes usage stats for a single bucket using pre/post snapshots.
  * An optional checkpoint snapshot can tighten the minimum when a reset is crossed.
  *
@@ -27901,368 +27997,245 @@ function computeBucketUsage(
   checkpointBucket,
   checkpointTimeSeconds
 ) {
-  const result = {
+  const fail = (reason) => ({
     valid: false,
     used: 0,
     remaining: undefined,
     crossed_reset: false,
-    warnings: []
-  };
+    warnings: [],
+    reason
+  });
 
   if (!startingBucket || !endingBucket) {
-    result.reason = 'missing_bucket';
-    return result;
+    return fail('missing_bucket');
   }
 
   const startingRemaining = Number(startingBucket.remaining);
   const endingRemaining = Number(endingBucket.remaining);
   if (!Number.isFinite(startingRemaining) || !Number.isFinite(endingRemaining)) {
-    result.reason = 'invalid_remaining';
-    return result;
+    return fail('invalid_remaining');
   }
 
   const startingLimit = Number(startingBucket.limit);
   const endingLimit = Number(endingBucket.limit);
   const resetPre = Number(startingBucket.reset);
   const crossedReset = Number.isFinite(resetPre) && endTimeSeconds >= resetPre;
-  result.crossed_reset = crossedReset;
 
-  let used;
-  if (crossedReset) {
-    if (!Number.isFinite(startingLimit) || !Number.isFinite(endingLimit)) {
-      result.reason = 'invalid_limit';
-      return result;
-    }
-    if (startingLimit !== endingLimit) {
-      result.warnings.push('limit_changed_across_reset');
-    }
-    used = endingLimit - endingRemaining;
+  const ctx = {
+    startingLimit,
+    endingLimit,
+    startingRemaining,
+    endingRemaining,
+    resetPre,
+    checkpointBucket,
+    checkpointTimeSeconds
+  };
 
-    if (
-      checkpointBucket &&
-      Number.isFinite(checkpointTimeSeconds) &&
-      Number.isFinite(resetPre) &&
-      checkpointTimeSeconds < resetPre
-    ) {
-      const checkpointRemaining = Number(checkpointBucket.remaining);
-      if (Number.isFinite(checkpointRemaining)) {
-        const checkpointUsed = startingRemaining - checkpointRemaining;
-        if (checkpointUsed > 0) {
-          used += checkpointUsed;
-        }
-      }
-    }
-  } else {
-    if (
-      Number.isFinite(startingLimit) &&
-      Number.isFinite(endingLimit) &&
-      startingLimit !== endingLimit
-    ) {
-      result.reason = 'limit_changed_without_reset';
-      return result;
-    }
-    used = startingRemaining - endingRemaining;
-    if (used < 0) {
-      result.reason = 'remaining_increased_without_reset';
-      return result;
-    }
-  }
+  const computation = crossedReset ? computeUsageAcrossReset(ctx) : computeUsageWithinWindow(ctx);
 
-  if (used < 0) {
-    result.reason = 'negative_usage';
+  if (computation.error) {
+    const result = fail(computation.error);
+    result.crossed_reset = crossedReset;
     return result;
   }
 
-  result.valid = true;
-  result.used = used;
-  result.remaining = endingRemaining;
-  return result;
-}
+  if (computation.used < 0) {
+    const result = fail('negative_usage');
+    result.crossed_reset = crossedReset;
+    return result;
+  }
 
-module.exports = { formatMs, makeSummaryTable, computeBucketUsage };
-
-
-/***/ }),
-
-/***/ 7656:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-/**
- * Retrieves a numeric state value from the GitHub Actions state.
- *
- * @param {string} key - The state key to retrieve.
- * @returns {number|undefined} - The numeric value if valid and finite, otherwise undefined.
- */
-
-/**
- * Writes a summary table of API resource usage to the GitHub Actions summary.
- *
- * @param {Object.<string, {used: number, remaining: number}>} resources - Object mapping bucket names to usage info.
- */
-
-/**
- * Main post-action function that calculates and reports GitHub API usage.
- * Fetches final rate limits, compares with starting values, and outputs usage data.
- *
- * @async
- * @returns {Promise<void>}
- */
-const core = __nccwpck_require__(7484);
-const fs = __nccwpck_require__(9896);
-const path = __nccwpck_require__(6928);
-const { fetchRateLimit } = __nccwpck_require__(5042);
-const { log, parseBuckets } = __nccwpck_require__(9630);
-const { formatMs, makeSummaryTable, computeBucketUsage } = __nccwpck_require__(5828);
-
-/**
- * Writes JSON-stringified data to a file if a valid pathname is provided.
- *
- * @param {string} pathname - file path to write to.
- * @param {object} data - data to write.
- * @param {object} fsModule - fs implementation to use.
- * @param {object} pathModule - path implementation to use.
- */
-function maybeWrite(pathname, data, fsModule, pathModule) {
-  if (!pathname) return;
-  const dir = pathModule.dirname(pathname);
-  if (dir && dir !== '.') fsModule.mkdirSync(dir, { recursive: true });
-  fsModule.writeFileSync(pathname, JSON.stringify(data, null, 2));
-}
-
-async function run(overrides = {}) {
-  const deps = {
-    core,
-    fs,
-    path,
-    fetchRateLimit,
-    log,
-    parseBuckets,
-    formatMs,
-    makeSummaryTable,
-    computeBucketUsage,
-    ...overrides
+  return {
+    valid: true,
+    used: computation.used,
+    remaining: endingRemaining,
+    crossed_reset: crossedReset,
+    warnings: computation.warnings
   };
-  if (deps.core.getState('skip_post') === 'true') {
-    deps.log('[github-api-usage-tracker] Skipping post step due to missing token');
-    return;
-  }
-  try {
-    const buckets = deps.parseBuckets(deps.core.getInput('buckets'));
+}
 
-    if (buckets.length === 0) {
-      deps.log('[github-api-usage-tracker] No valid buckets specified for tracking');
-      return;
-    }
-
-    const startingState = deps.core.getState('starting_rate_limits');
-    if (!startingState) {
-      deps.core.error(
-        '[github-api-usage-tracker] No starting rate limit data found; skipping post step'
-      );
-      return;
-    }
-    let startingResources;
-    try {
-      startingResources = JSON.parse(startingState);
-    } catch {
-      deps.core.error(
-        '[github-api-usage-tracker] Failed to parse starting rate limit data; skipping post step'
-      );
-      return;
-    }
-    const startTime = Number(deps.core.getState('start_time'));
-    const hasStartTime = Number.isFinite(startTime);
-    if (!hasStartTime) {
-      deps.core.error(
-        '[github-api-usage-tracker] Invalid or missing start time; duration will be reported as unknown'
-      );
-    }
-    const checkpointState = deps.core.getState('checkpoint_rate_limits');
-    let checkpointResources;
-    let checkpointTimeSeconds = null;
-    if (checkpointState) {
-      try {
-        checkpointResources = JSON.parse(checkpointState);
-      } catch {
-        deps.core.warning(
-          '[github-api-usage-tracker] Failed to parse checkpoint rate limit data; ignoring checkpoint snapshot'
-        );
-      }
-    }
-    if (checkpointResources) {
-      const checkpointTimeMs = Number(deps.core.getState('checkpoint_time'));
-      checkpointTimeSeconds =
-        Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
-          ? Math.floor(checkpointTimeMs / 1000)
-          : null;
-    }
-    const endTime = Date.now();
-    const endTimeSeconds = Math.floor(endTime / 1000);
-    const duration = hasStartTime ? endTime - startTime : null;
-
-    deps.log('[github-api-usage-tracker] Fetching final rate limits...');
-
-    const endingLimits = await deps.fetchRateLimit();
-    const endingResources = endingLimits.resources || {};
-
-    deps.log('[github-api-usage-tracker] Final Snapshot:');
-    deps.log('[github-api-usage-tracker] -----------------');
-    deps.log(`[github-api-usage-tracker] ${JSON.stringify(endingResources, null, 2)}`);
-
-    const data = {};
-    const crossedBuckets = [];
-    let totalUsed = 0;
-    let totalIsMinimum = false;
-
-    for (const bucket of buckets) {
-      const startingBucket = startingResources[bucket];
-      const endingBucket = endingResources[bucket];
-      if (!startingBucket) {
-        deps.core.warning(
-          `[github-api-usage-tracker] Starting rate limit bucket "${bucket}" not found; skipping`
-        );
-        continue;
-      }
-      if (!endingBucket) {
-        deps.core.warning(
-          `[github-api-usage-tracker] Ending rate limit bucket "${bucket}" not found; skipping`
-        );
-        continue;
-      }
-
-      const checkpointBucket = checkpointResources ? checkpointResources[bucket] : undefined;
-      const usage = deps.computeBucketUsage(
-        startingBucket,
-        endingBucket,
-        endTimeSeconds,
-        checkpointBucket,
-        checkpointTimeSeconds
-      );
-      if (!usage.valid) {
-        switch (usage.reason) {
-          case 'invalid_remaining':
-            deps.core.warning(
-              `[github-api-usage-tracker] Invalid remaining count for bucket "${bucket}"; skipping`
-            );
-            break;
-          case 'invalid_limit':
-            deps.core.warning(
-              `[github-api-usage-tracker] Invalid limit for bucket "${bucket}" during reset crossing; skipping`
-            );
-            break;
-          case 'limit_changed_without_reset':
-            deps.core.warning(
-              `[github-api-usage-tracker] Limit changed without reset for bucket "${bucket}"; skipping`
-            );
-            break;
-          case 'remaining_increased_without_reset':
-            deps.core.warning(
-              `[github-api-usage-tracker] Remaining increased without reset for bucket "${bucket}"; skipping`
-            );
-            break;
-          case 'negative_usage':
-            deps.core.warning(
-              `[github-api-usage-tracker] Negative usage for bucket "${bucket}" detected; skipping`
-            );
-            break;
-          default:
-            deps.core.warning(
-              `[github-api-usage-tracker] Invalid usage data for bucket "${bucket}"; skipping`
-            );
-            break;
-        }
-        continue;
-      }
-
-      if (usage.warnings.includes('limit_changed_across_reset')) {
-        deps.core.warning(
-          `[github-api-usage-tracker] Limit changed across reset for bucket "${bucket}"; results may reflect a token change`
-        );
-      }
-
-      const startingRemaining = Number(startingBucket.remaining);
-      const startingLimit = Number(startingBucket.limit);
-      const endingRemaining = Number(endingBucket.remaining);
-      const endingLimit = Number(endingBucket.limit);
-      const startUsed =
-        Number.isFinite(startingLimit) && Number.isFinite(startingRemaining)
-          ? startingLimit - startingRemaining
-          : null;
-      const endUsed =
-        Number.isFinite(endingLimit) && Number.isFinite(endingRemaining)
-          ? endingLimit - endingRemaining
-          : null;
-      data[bucket] = {
-        used: {
-          start: startUsed,
-          end: endUsed,
-          total: usage.used
-        },
-        remaining: {
-          start: Number.isFinite(startingRemaining) ? startingRemaining : null,
-          end: Number.isFinite(endingRemaining) ? endingRemaining : null
-        },
-        crossed_reset: usage.crossed_reset
-      };
-      if (usage.crossed_reset) {
-        crossedBuckets.push(bucket);
-      }
-      if (usage.crossed_reset) {
-        totalIsMinimum = true;
-      }
-      totalUsed += usage.used;
-    }
-
-    // Set output
-    const output = {
-      total: totalUsed,
-      duration_ms: duration,
-      buckets_data: data,
-      crossed_reset: totalIsMinimum
-    };
-    deps.core.setOutput('usage', JSON.stringify(output, null, 2));
-
-    // Write JSON file if path specified
-    const outPath = (deps.core.getInput('output_path') || '').trim();
-    maybeWrite(outPath, output, deps.fs, deps.path);
-
-    deps.log(
-      `[github-api-usage-tracker] Preparing summary table for ${Object.keys(data).length} bucket(s)`
-    );
-    const summary = deps.core.summary
-      .addHeading('GitHub API Usage Tracker Summary')
-      .addTable(deps.makeSummaryTable(data, { useMinimumHeader: totalIsMinimum }));
-    if (crossedBuckets.length > 0) {
-      summary.addRaw(
-        `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
-        true
-      );
-      summary.addRaw(
-        '<p><strong>Total Usage:</strong> Total usage cannot be computed - usage reset window was crossed.</p>',
-        true
-      );
-      summary.addRaw(`<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
-    }
-    summary.addRaw(
-      `<p><strong>Action Duration:</strong> ${
-        hasStartTime ? deps.formatMs(duration) : 'Unknown (data missing)'
-      }</p>`,
-      true
-    );
-    if (crossedBuckets.length === 0) {
-      summary.addRaw(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`, true);
-    }
-    summary.write();
-  } catch (err) {
-    deps.core.error(`[github-api-usage-tracker] Post step failed: ${err.message}`);
+/**
+ * Returns a warning message for invalid bucket usage (without prefix).
+ *
+ * @param {string} reason - the reason code from computeBucketUsage.
+ * @param {string} bucket - the bucket name.
+ * @returns {string} - formatted warning message.
+ */
+function getUsageWarningMessage(reason, bucket) {
+  switch (reason) {
+    case 'invalid_remaining':
+      return `Invalid remaining count for bucket "${bucket}"; skipping`;
+    case 'invalid_limit':
+      return `Invalid limit for bucket "${bucket}" during reset crossing; skipping`;
+    case 'limit_changed_without_reset':
+      return `Limit changed without reset for bucket "${bucket}"; skipping`;
+    case 'remaining_increased_without_reset':
+      return `Remaining increased without reset for bucket "${bucket}"; skipping`;
+    case 'negative_usage':
+      return `Negative usage for bucket "${bucket}" detected; skipping`;
+    default:
+      return `Invalid usage data for bucket "${bucket}"; skipping`;
   }
 }
 
-if (require.main === require.cache[eval('__filename')]) {
-  run();
+/** Returns a finite number or null. */
+const finiteOrNull = (v) => (Number.isFinite(v) ? v : null);
+
+/** Computes used (limit - remaining) if both are finite, else null. */
+const computeUsed = (limit, remaining) =>
+  Number.isFinite(limit) && Number.isFinite(remaining) ? limit - remaining : null;
+
+/**
+ * Builds the data object for a single bucket from snapshots and computed usage.
+ *
+ * @param {object} startingBucket - bucket from the pre snapshot.
+ * @param {object} endingBucket - bucket from the post snapshot.
+ * @param {object} usage - computed usage from computeBucketUsage.
+ * @returns {object} - bucket data with used/remaining info.
+ */
+function buildBucketData(startingBucket, endingBucket, usage) {
+  const startRemaining = Number(startingBucket.remaining);
+  const startLimit = Number(startingBucket.limit);
+  const endRemaining = Number(endingBucket.remaining);
+  const endLimit = Number(endingBucket.limit);
+
+  return {
+    used: {
+      start: computeUsed(startLimit, startRemaining),
+      end: computeUsed(endLimit, endRemaining),
+      total: usage.used
+    },
+    remaining: {
+      start: finiteOrNull(startRemaining),
+      end: finiteOrNull(endRemaining)
+    },
+    crossed_reset: usage.crossed_reset
+  };
 }
 
-module.exports = { run, maybeWrite };
+/**
+ * Builds the summary content object for the job summary.
+ *
+ * @param {object} data - bucket data keyed by bucket name.
+ * @param {string[]} crossedBuckets - list of buckets that crossed reset.
+ * @param {number} totalUsed - total API calls/points used.
+ * @param {number|null} duration - action duration in milliseconds.
+ * @returns {object} - summary content with table and HTML sections.
+ */
+function buildSummaryContent(data, crossedBuckets, totalUsed, duration) {
+  const totalIsMinimum = crossedBuckets.length > 0;
+  const table = makeSummaryTable(data, { useMinimumHeader: totalIsMinimum });
+
+  const sections = [];
+  const push = (htmlArray) => sections.push(...htmlArray);
+
+  if (totalIsMinimum) {
+    push([
+      `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
+      '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>',
+      `<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`
+    ]);
+  } else {
+    push([`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`]);
+  }
+
+  push([
+    `<p><strong>Action Duration:</strong> ${duration !== null ? formatMs(duration) : 'Unknown'}</p>`
+  ]);
+
+  return { table, sections };
+}
+
+/**
+ * Parses checkpoint time from milliseconds to seconds.
+ * @param {number|null} checkpointTimeMs - checkpoint time in milliseconds.
+ * @returns {number|null} - checkpoint time in seconds, or null if invalid.
+ */
+function parseCheckpointTime(checkpointTimeMs) {
+  return Number.isFinite(checkpointTimeMs) && checkpointTimeMs > 0
+    ? Math.floor(checkpointTimeMs / 1000)
+    : null;
+}
+
+/**
+ * Processes all buckets and computes usage data.
+ *
+ * @param {object} params - processing parameters.
+ * @param {string[]} params.buckets - list of bucket names to process.
+ * @param {object} params.startingResources - starting rate limit resources.
+ * @param {object} params.endingResources - ending rate limit resources.
+ * @param {object|null} params.checkpointResources - checkpoint resources (optional).
+ * @param {number} params.endTimeSeconds - end time in seconds.
+ * @param {number|null} params.checkpointTimeSeconds - checkpoint time in seconds.
+ * @returns {object} - { data, crossedBuckets, totalUsed, warnings }.
+ */
+function processBuckets({
+  buckets,
+  startingResources,
+  endingResources,
+  checkpointResources,
+  endTimeSeconds,
+  checkpointTimeSeconds
+}) {
+  const data = {};
+  const crossedBuckets = [];
+  const warnings = [];
+  let totalUsed = 0;
+
+  for (const bucket of buckets) {
+    const startingBucket = startingResources[bucket];
+    const endingBucket = endingResources[bucket];
+
+    if (!startingBucket) {
+      warnings.push(`Starting bucket "${bucket}" not found; skipping`);
+      continue;
+    }
+    if (!endingBucket) {
+      warnings.push(`Ending bucket "${bucket}" not found; skipping`);
+      continue;
+    }
+
+    const checkpointBucket = checkpointResources ? checkpointResources[bucket] : undefined;
+    const usage = computeBucketUsage(
+      startingBucket,
+      endingBucket,
+      endTimeSeconds,
+      checkpointBucket,
+      checkpointTimeSeconds
+    );
+
+    if (!usage.valid) {
+      warnings.push(getUsageWarningMessage(usage.reason, bucket));
+      continue;
+    }
+
+    if (usage.warnings.includes('limit_changed_across_reset')) {
+      warnings.push(
+        `Limit changed across reset for bucket "${bucket}"; results may reflect a token change`
+      );
+    }
+
+    data[bucket] = buildBucketData(startingBucket, endingBucket, usage);
+    if (usage.crossed_reset) {
+      crossedBuckets.push(bucket);
+    }
+    totalUsed += usage.used;
+  }
+
+  return { data, crossedBuckets, totalUsed, warnings };
+}
+
+module.exports = {
+  maybeWriteJson,
+  formatMs,
+  makeSummaryTable,
+  computeBucketUsage,
+  getUsageWarningMessage,
+  buildBucketData,
+  buildSummaryContent,
+  parseCheckpointTime,
+  processBuckets
+};
 
 
 /***/ }),
@@ -28274,10 +28247,22 @@ const core = __nccwpck_require__(7484);
 const https = __nccwpck_require__(5692);
 const { log } = __nccwpck_require__(9630);
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 function fetchRateLimit() {
   const token = core.getInput('token');
   return new Promise((resolve, reject) => {
     if (!token) return reject(new Error('No GitHub token provided'));
+    let settled = false;
+    const finalize = (err, data) => {
+      if (settled) return;
+      settled = true;
+      if (err) {
+        reject(err);
+      } else {
+        resolve(data);
+      }
+    };
 
     const req = https.request(
       {
@@ -28295,18 +28280,24 @@ function fetchRateLimit() {
         res.on('end', () => {
           log(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
+            return finalize(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
           }
           try {
-            resolve(JSON.parse(data));
+            finalize(null, JSON.parse(data));
           } catch (e) {
-            reject(e);
+            finalize(e);
           }
         });
       }
     );
 
-    req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS);
+    req.on('timeout', () => {
+      const err = new Error(`GitHub API request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      req.destroy(err);
+      finalize(err);
+    });
+    req.on('error', finalize);
     req.end();
   });
 }
@@ -28354,12 +28345,98 @@ module.exports = { fetchRateLimit };
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(7656);
-/******/ 	module.exports = __webpack_exports__;
-/******/ 	
+var __webpack_exports__ = {};
+const core = __nccwpck_require__(7484);
+const { fetchRateLimit } = __nccwpck_require__(5042);
+const { log, warn, error, parseBuckets } = __nccwpck_require__(9630);
+const {
+  maybeWriteJson,
+  buildSummaryContent,
+  parseCheckpointTime,
+  processBuckets
+} = __nccwpck_require__(5828);
+
+async function run() {
+  if (core.getState('skip_rest') === 'true') {
+    log('Skipping post step');
+    return;
+  }
+  try {
+    const buckets = parseBuckets(core.getInput('buckets'));
+    if (buckets.length === 0) {
+      log('No valid buckets specified for tracking');
+      return;
+    }
+
+    // Get starting state (saved by pre.js)
+    const startingState = core.getState('starting_rate_limits');
+    if (!startingState) {
+      error('No starting rate limit data found; skipping');
+      return;
+    }
+    const startingResources = JSON.parse(startingState);
+    const startTime = Number(core.getState('start_time'));
+    const hasStartTime = Number.isFinite(startTime);
+
+    // Get checkpoint state if available (saved by checkpoint.js)
+    const checkpointState = core.getState('checkpoint_rate_limits');
+    const checkpointResources = checkpointState ? JSON.parse(checkpointState) : null;
+    const checkpointTimeMs = checkpointResources ? Number(core.getState('checkpoint_time')) : null;
+    const checkpointTimeSeconds = parseCheckpointTime(checkpointTimeMs);
+
+    // Fetch final rate limits
+    log('Fetching final rate limits...');
+    const endingLimits = await fetchRateLimit();
+    const endingResources = endingLimits.resources || {};
+    const endTime = Date.now();
+    const endTimeSeconds = Math.floor(endTime / 1000);
+    const duration = hasStartTime ? endTime - startTime : null;
+
+    log('Final Snapshot:');
+    log('-----------------');
+    log(JSON.stringify(endingResources, null, 2));
+
+    // Process each bucket
+    const { data, crossedBuckets, totalUsed, warnings } = processBuckets({
+      buckets,
+      startingResources,
+      endingResources,
+      checkpointResources,
+      endTimeSeconds,
+      checkpointTimeSeconds
+    });
+    warnings.forEach((msg) => warn(msg));
+
+    // Set output
+    const output = {
+      total: totalUsed,
+      duration_ms: duration,
+      buckets_data: data,
+      crossed_reset: crossedBuckets.length > 0
+    };
+    core.setOutput('usage', JSON.stringify(output, null, 2));
+
+    // Write JSON file if path specified
+    const outPath = (core.getInput('output_path') || '').trim();
+    maybeWriteJson(outPath, output);
+
+    // Build summary
+    log(`Preparing summary table for ${Object.keys(data).length} bucket(s)`);
+    const summaryContent = buildSummaryContent(data, crossedBuckets, totalUsed, duration);
+    const summary = core.summary
+      .addHeading('GitHub API Usage Tracker Summary')
+      .addTable(summaryContent.table);
+    for (const section of summaryContent.sections) {
+      summary.addRaw(section, true);
+    }
+    await summary.write();
+  } catch (err) {
+    error(`Post step failed: ${err.message}`);
+  }
+}
+
+run();
+
+module.exports = __webpack_exports__;
 /******/ })()
 ;

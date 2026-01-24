@@ -1,6 +1,11 @@
 const core = require('@actions/core');
 
 /**
+ * Prefix for all log messages.
+ */
+const PREFIX = '[github-api-usage-tracker]';
+
+/**
  * List of valid GitHub API rate limit buckets.
  */
 const VALID_BUCKETS = [
@@ -17,12 +22,30 @@ const VALID_BUCKETS = [
 ];
 
 /**
- * Logs a message using GitHub Actions debug logging.
+ * Logs a debug message with prefix.
  *
  * @param {string} message - message to log.
  */
 function log(message) {
-  core.debug(message);
+  core.debug(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs a warning message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function warn(message) {
+  core.warning(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs an error message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function error(message) {
+  core.error(`${PREFIX} ${message}`);
 }
 
 /**
@@ -48,11 +71,11 @@ function parseBuckets(raw) {
     }
   }
   if (invalidBuckets.length > 0) {
-    core.warning(
+    warn(
       `Invalid bucket(s) selected: ${invalidBuckets.join(', ')}, valid options are: ${VALID_BUCKETS.join(', ')}`
     );
   }
   return buckets;
 }
 
-module.exports = { log, parseBuckets, VALID_BUCKETS };
+module.exports = { PREFIX, log, warn, error, parseBuckets, VALID_BUCKETS };

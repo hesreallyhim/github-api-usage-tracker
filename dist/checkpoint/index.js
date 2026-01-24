@@ -27768,55 +27768,15 @@ module.exports = parseParams
 
 /***/ }),
 
-/***/ 3568:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-const core = __nccwpck_require__(7484);
-const { fetchRateLimit } = __nccwpck_require__(5042);
-const { log } = __nccwpck_require__(9630);
-
-async function run(overrides = {}) {
-  const deps = {
-    core,
-    fetchRateLimit,
-    log,
-    ...overrides
-  };
-  try {
-    const token = deps.core.getInput('token');
-    if (!token) {
-      deps.log('[github-api-usage-tracker] Skipping checkpoint snapshot due to missing token');
-      return;
-    }
-
-    deps.log('[github-api-usage-tracker] Fetching checkpoint rate limits...');
-    const limits = await deps.fetchRateLimit();
-    const resources = limits.resources || {};
-
-    deps.log('[github-api-usage-tracker] Checkpoint Snapshot:');
-    deps.log('[github-api-usage-tracker] ---------------------');
-    deps.log(`[github-api-usage-tracker] ${JSON.stringify(resources, null, 2)}`);
-
-    deps.core.saveState('checkpoint_time', String(Date.now()));
-    deps.core.saveState('checkpoint_rate_limits', JSON.stringify(resources));
-  } catch (err) {
-    deps.core.warning(`[github-api-usage-tracker] Main step snapshot failed: ${err.message}`);
-  }
-}
-
-if (require.main === require.cache[eval('__filename')]) {
-  run();
-}
-
-module.exports = { run };
-
-
-/***/ }),
-
 /***/ 9630:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(7484);
+
+/**
+ * Prefix for all log messages.
+ */
+const PREFIX = '[github-api-usage-tracker]';
 
 /**
  * List of valid GitHub API rate limit buckets.
@@ -27835,12 +27795,30 @@ const VALID_BUCKETS = [
 ];
 
 /**
- * Logs a message using GitHub Actions debug logging.
+ * Logs a debug message with prefix.
  *
  * @param {string} message - message to log.
  */
 function log(message) {
-  core.debug(message);
+  core.debug(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs a warning message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function warn(message) {
+  core.warning(`${PREFIX} ${message}`);
+}
+
+/**
+ * Logs an error message with prefix.
+ *
+ * @param {string} message - message to log.
+ */
+function error(message) {
+  core.error(`${PREFIX} ${message}`);
 }
 
 /**
@@ -27866,14 +27844,14 @@ function parseBuckets(raw) {
     }
   }
   if (invalidBuckets.length > 0) {
-    core.warning(
+    warn(
       `Invalid bucket(s) selected: ${invalidBuckets.join(', ')}, valid options are: ${VALID_BUCKETS.join(', ')}`
     );
   }
   return buckets;
 }
 
-module.exports = { log, parseBuckets, VALID_BUCKETS };
+module.exports = { PREFIX, log, warn, error, parseBuckets, VALID_BUCKETS };
 
 
 /***/ }),
@@ -27885,10 +27863,22 @@ const core = __nccwpck_require__(7484);
 const https = __nccwpck_require__(5692);
 const { log } = __nccwpck_require__(9630);
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 function fetchRateLimit() {
   const token = core.getInput('token');
   return new Promise((resolve, reject) => {
     if (!token) return reject(new Error('No GitHub token provided'));
+    let settled = false;
+    const finalize = (err, data) => {
+      if (settled) return;
+      settled = true;
+      if (err) {
+        reject(err);
+      } else {
+        resolve(data);
+      }
+    };
 
     const req = https.request(
       {
@@ -27906,18 +27896,24 @@ function fetchRateLimit() {
         res.on('end', () => {
           log(`[github-api-usage-tracker] GitHub API response: ${res.statusCode}`);
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
+            return finalize(new Error(`GitHub API returned ${res.statusCode}: ${data}`));
           }
           try {
-            resolve(JSON.parse(data));
+            finalize(null, JSON.parse(data));
           } catch (e) {
-            reject(e);
+            finalize(e);
           }
         });
       }
     );
 
-    req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS);
+    req.on('timeout', () => {
+      const err = new Error(`GitHub API request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      req.destroy(err);
+      finalize(err);
+    });
+    req.on('error', finalize);
     req.end();
   });
 }
@@ -27965,12 +27961,34 @@ module.exports = { fetchRateLimit };
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(3568);
-/******/ 	module.exports = __webpack_exports__;
-/******/ 	
+var __webpack_exports__ = {};
+const core = __nccwpck_require__(7484);
+const { fetchRateLimit } = __nccwpck_require__(5042);
+const { log, warn } = __nccwpck_require__(9630);
+
+async function run() {
+  if (core.getState('skip_rest') === 'true') {
+    log('Skipping checkpoint step');
+    return;
+  }
+  try {
+    log('Fetching checkpoint rate limits...');
+    const limits = await fetchRateLimit();
+    const resources = limits.resources || {};
+
+    log('Checkpoint Snapshot:');
+    log('---------------------');
+    log(JSON.stringify(resources, null, 2));
+
+    core.saveState('checkpoint_time', String(Date.now()));
+    core.saveState('checkpoint_rate_limits', JSON.stringify(resources));
+  } catch (err) {
+    warn(`Main step snapshot failed: ${err.message}`);
+  }
+}
+
+run();
+
+module.exports = __webpack_exports__;
 /******/ })()
 ;
