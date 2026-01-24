@@ -142,27 +142,26 @@ function computeBucketUsage(
 }
 
 /**
- * Returns a warning message for invalid bucket usage.
+ * Returns a warning message for invalid bucket usage (without prefix).
  *
  * @param {string} reason - the reason code from computeBucketUsage.
  * @param {string} bucket - the bucket name.
  * @returns {string} - formatted warning message.
  */
 function getUsageWarningMessage(reason, bucket) {
-  const prefix = '[github-api-usage-tracker]';
   switch (reason) {
     case 'invalid_remaining':
-      return `${prefix} Invalid remaining count for bucket "${bucket}"; skipping`;
+      return `Invalid remaining count for bucket "${bucket}"; skipping`;
     case 'invalid_limit':
-      return `${prefix} Invalid limit for bucket "${bucket}" during reset crossing; skipping`;
+      return `Invalid limit for bucket "${bucket}" during reset crossing; skipping`;
     case 'limit_changed_without_reset':
-      return `${prefix} Limit changed without reset for bucket "${bucket}"; skipping`;
+      return `Limit changed without reset for bucket "${bucket}"; skipping`;
     case 'remaining_increased_without_reset':
-      return `${prefix} Remaining increased without reset for bucket "${bucket}"; skipping`;
+      return `Remaining increased without reset for bucket "${bucket}"; skipping`;
     case 'negative_usage':
-      return `${prefix} Negative usage for bucket "${bucket}" detected; skipping`;
+      return `Negative usage for bucket "${bucket}" detected; skipping`;
     default:
-      return `${prefix} Invalid usage data for bucket "${bucket}"; skipping`;
+      return `Invalid usage data for bucket "${bucket}"; skipping`;
   }
 }
 

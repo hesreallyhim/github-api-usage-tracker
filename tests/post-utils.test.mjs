@@ -303,41 +303,40 @@ describe('computeBucketUsage', () => {
 
 describe('getUsageWarningMessage', () => {
   const bucket = 'core';
-  const prefix = '[github-api-usage-tracker]';
 
   it('returns message for invalid_remaining', () => {
     expect(getUsageWarningMessage('invalid_remaining', bucket)).toBe(
-      `${prefix} Invalid remaining count for bucket "core"; skipping`
+      'Invalid remaining count for bucket "core"; skipping'
     );
   });
 
   it('returns message for invalid_limit', () => {
     expect(getUsageWarningMessage('invalid_limit', bucket)).toBe(
-      `${prefix} Invalid limit for bucket "core" during reset crossing; skipping`
+      'Invalid limit for bucket "core" during reset crossing; skipping'
     );
   });
 
   it('returns message for limit_changed_without_reset', () => {
     expect(getUsageWarningMessage('limit_changed_without_reset', bucket)).toBe(
-      `${prefix} Limit changed without reset for bucket "core"; skipping`
+      'Limit changed without reset for bucket "core"; skipping'
     );
   });
 
   it('returns message for remaining_increased_without_reset', () => {
     expect(getUsageWarningMessage('remaining_increased_without_reset', bucket)).toBe(
-      `${prefix} Remaining increased without reset for bucket "core"; skipping`
+      'Remaining increased without reset for bucket "core"; skipping'
     );
   });
 
   it('returns message for negative_usage', () => {
     expect(getUsageWarningMessage('negative_usage', bucket)).toBe(
-      `${prefix} Negative usage for bucket "core" detected; skipping`
+      'Negative usage for bucket "core" detected; skipping'
     );
   });
 
   it('returns default message for unknown reason', () => {
     expect(getUsageWarningMessage('unknown_reason', bucket)).toBe(
-      `${prefix} Invalid usage data for bucket "core"; skipping`
+      'Invalid usage data for bucket "core"; skipping'
     );
   });
 });
