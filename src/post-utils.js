@@ -216,22 +216,21 @@ function buildSummaryContent(data, crossedBuckets, totalUsed, duration) {
   const table = makeSummaryTable(data, { useMinimumHeader: totalIsMinimum });
 
   const sections = [];
+  const push = (htmlArray) => sections.push(...htmlArray);
 
   if (totalIsMinimum) {
-    sections.push(
-      `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`
-    );
-    sections.push(
-      '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>'
-    );
-    sections.push(`<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`);
+    push([
+      `<p><strong>Reset Window Crossed:</strong> Yes (${crossedBuckets.join(', ')})</p>`,
+      '<p><strong>Total Usage:</strong> Cannot be computed - reset window was crossed.</p>',
+      `<p><strong>Minimum API Calls/Points Used:</strong> ${totalUsed}</p>`
+    ]);
   } else {
-    sections.push(`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`);
+    push([`<p><strong>Total API Calls/Points Used:</strong> ${totalUsed}</p>`]);
   }
 
-  sections.push(
+  push([
     `<p><strong>Action Duration:</strong> ${duration !== null ? formatMs(duration) : 'Unknown'}</p>`
-  );
+  ]);
 
   return { table, sections };
 }
